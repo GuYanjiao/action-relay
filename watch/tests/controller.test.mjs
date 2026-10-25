@@ -16,6 +16,7 @@ function setup(config = {}) {
   const sent = [];
   let view = {};
   let sends = [];
+  let statusSeq = 0;
   const connect = {
     send(opts) { sent.push(JSON.parse(JSON.stringify(opts.data))); sends.push(opts); if (!config.noSendCallback) opts.success(); },
     getReadyState(opts) { if (config.deferReady) connect.readyCallback = opts; else opts.success({status: 1}); }
@@ -28,7 +29,12 @@ function setup(config = {}) {
     onState: state => { view = state; }
   });
   function receive(packet,wrap = true) { connect.onmessage(wrap ? {data: JSON.stringify(packet)} : packet); }
-  function status(fields = {}) { receive(Object.assign({v:1,type:'status',camera:'ready',recording:false,canControl:true,busy:false,battery:72,recordSeconds:0,message:'',session:'session-a',ticket:'ticket-a'},fields)); }
+  function status(fields = {}) {
+    const packet = Object.assign({v:1,type:'status',seq:++statusSeq,camera:'ready',recording:false,canControl:true,canStart:true,canStop:false,busy:false,battery:72,recordSeconds:0,recordPhase:'idle',gpsState:'off',gpsEnabled:false,message:'',session:'session-a',ticket:'ticket-a',revision:1},fields);
+    if (!Object.prototype.hasOwnProperty.call(fields,'canStart')) packet.canStart = packet.recording === false;
+    if (!Object.prototype.hasOwnProperty.call(fields,'canStop')) packet.canStop = packet.recording === true;
+    receive(packet);
+  }
   function advance(ms) {
     const end = time + ms;
     while (true) {

@@ -12,24 +12,26 @@ const timers=new Map();
 const connect={send:opts=>{sent.push(opts.data);opts.success();},getReadyState:opts=>opts.success({status:1})};
 const native=name=>{assert.equal(name,'@app-module/system.interconnect');return {instance:()=>connect};};
 const global={$app_require$:native,setTimeout:fn=>{timers.set(++timerId,fn);return timerId;},clearTimeout:id=>timers.delete(id)};
-const context=vm.createContext({$app_require$:native,aiot:{__ce__:(tag,data,children)=>({tag,opts:data.__opts__,children})}});
+const context=vm.createContext({$app_require$:native,aiot:{
+  __ce__:(tag,data,children)=>({tag,opts:data.__opts__,children}),
+  __ci__:(tag,data,children)=>({tag,opts:data.__opts__,children})
+}});
 const init=vm.runInContext('('+code.replace(/^export default /,'')+')',context);
 const entries={};init(global,global,{},entries,()=>{});
 const out={};entries.entry(out);
 const page=Object.assign({},out.default.data,out.default);
 page.onInit(); assert.equal(page.startEnabled,false);
-connect.onmessage({data:JSON.stringify({v:1,type:'status',camera:'ready',recording:false,canControl:true,busy:false,session:'s',ticket:'t'})});
+connect.onmessage({data:JSON.stringify({v:1,type:'status',camera:'ready',recording:false,canControl:true,canStart:true,canStop:false,busy:false,session:'s',seq:1,revision:1,ticket:'t'})});
 assert.equal(page.startEnabled,true);assert.equal(page.stopEnabled,false);
 const dom=page.template(page);
-const buttons=dom.children.filter(x=>x.tag==='input');
-assert.equal(buttons.length,2);
-assert.equal(buttons[0].opts.disabled(),false);assert.equal(buttons[1].opts.disabled(),true);
-page.startRecording();const command=sent.find(x=>x.type==='command');assert.ok(command);
+assert.equal(page.captureIcon,'/common/ui/capture-record.png');
+assert.equal(typeof page.tapCapture,'function');
+page.tapCapture();const command=sent.find(x=>x.type==='command');assert.ok(command);
 assert.equal(command.session,'s');assert.equal(command.ticket,'t');
 assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,false);
 connect.onmessage({data:JSON.stringify({v:1,type:'result',id:command.id,ok:true,phase:'confirmed'})});
 assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,false);
-connect.onmessage({data:JSON.stringify({v:1,type:'status',camera:'ready',recording:true,canControl:true,busy:false,session:'s',ticket:'t2'})});
+connect.onmessage({data:JSON.stringify({v:1,type:'status',camera:'ready',recording:true,canControl:true,canStart:false,canStop:true,busy:false,session:'s',seq:2,revision:2,ticket:'t2'})});
 assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,true);
 page.onHide();assert.equal(timers.size,0);
 page.onShow();assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,false);

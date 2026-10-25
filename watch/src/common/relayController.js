@@ -14,6 +14,8 @@ export function createRelayController(options) {
   var message = '先在手机打开中转应用';
   var now = options.now || function () { return Date.now(); };
   var prefix = now().toString(36) + '-' + Math.floor(Math.random() * 1000000).toString(36);
+  var lastSeq = -1;
+  var lastSession = null;
   var cameraNames = { disconnected: '未连接', connecting: '连接中', authorizing: '等待授权', ready: '已就绪' };
 
   function shorten(value) {
@@ -33,7 +35,10 @@ export function createRelayController(options) {
     var status = fresh ? lastStatus : null;
     var camera = status ? status.camera : 'disconnected';
     var recording = status ? status.recording : null;
-    var allowed = fresh && hasTokens(status) && camera === 'ready' && status.canControl === true && status.busy !== true && !pending && typeof recording === 'boolean';
+    var phase = status ? (status.recordPhase || (recording ? 'recording' : 'idle')) : 'unknown';
+    var canStart = fresh && hasTokens(status) && camera === 'ready' && status.canStart === true && !pending;
+    var canStop = fresh && hasTokens(status) && camera === 'ready' && status.canStop === true &&
+      (!pending || pending.action === 'start');
     var phoneText = transportOpen ? (fresh ? '手机：已连接' : '手机：等待状态') : '手机：未连接';
     var recordText = '状态未知';
     if (fresh && camera === 'ready' && typeof recording === 'boolean') recordText = recording ? '正在录像' : '已停止录像';
@@ -58,13 +63,20 @@ export function createRelayController(options) {
       recordText: recordText,
       metaText: meta,
       noteText: shorten(message),
-      startEnabled: allowed && !recording,
-      stopEnabled: allowed && recording,
-      startClass: allowed && !recording ? 'button start-on' : 'button button-off',
-      stopClass: allowed && recording ? 'button stop-on' : 'button button-off',
+      startClass: canStart ? 'button start-on' : 'button button-off',
+      stopClass: canStop ? 'button stop-on' : 'button button-off',
       recording: recording === true,
       pending: !!pending,
-      fresh: fresh
+      fresh: fresh,
+      phoneConnected: transportOpen && fresh,
+      cameraReady: fresh && camera === 'ready',
+      battery: status ? status.battery : -1,
+      recordSeconds: status ? status.recordSeconds : -1,
+      recordPhase: phase,
+      gpsState: status ? status.gpsState : 'off',
+      gpsEnabled: status ? status.gpsEnabled === true : false,
+      startEnabled: canStart,
+      stopEnabled: canStop
     });
   }
 
@@ -72,6 +84,8 @@ export function createRelayController(options) {
     lastReceived = null;
     lastStatus = null;
     pending = null;
+    lastSeq = -1;
+    lastSession = null;
     if (disconnected) transportOpen = false;
     message = text;
     emit();
@@ -98,6 +112,14 @@ export function createRelayController(options) {
       if (!Object.prototype.hasOwnProperty.call(cameraNames, packet.camera)) return;
       if (packet.recording !== null && typeof packet.recording !== 'boolean') return;
       if (typeof packet.canControl !== 'boolean' || typeof packet.busy !== 'boolean') return;
+      if (typeof packet.seq === 'number' && lastSession === packet.session && packet.seq <= lastSeq) return;
+      if (typeof packet.seq === 'number') lastSeq = packet.seq;
+      if (lastSession && lastSession !== packet.session) {
+        pending = null;
+        lastSeq = typeof packet.seq === 'number' ? packet.seq : -1;
+        message = '手机连接已更新，请重新操作';
+      }
+      lastSession = packet.session || null;
       var previousSession = pending ? pending.session : (lastStatus ? lastStatus.session : null);
       if (hasTokens(packet) && previousSession && previousSession !== packet.session) {
         pending = null;
@@ -112,6 +134,7 @@ export function createRelayController(options) {
       return;
     }
     if (packet.type === 'result' && pending && packet.id === pending.id) {
+      if (packet.session && pending.session !== packet.session) return;
       if (packet.phase === 'accepted') {
         message = packet.message || '指令已受理，等待相机确认';
       } else if (packet.phase === 'confirmed' && packet.ok === true) {
@@ -205,7 +228,7 @@ export function createRelayController(options) {
       timerSet = false;
       if (!visible || destroyed) return;
       var time = now();
-      if (pending && (time - pending.sentAt >= 8000 || time < pending.sentAt)) {
+      if (pending && (time - pending.sentAt >= (pending.action === 'stop' ? 25000 : 8000) || time < pending.sentAt)) {
         pending = null;
         lastStatus = null;
         lastReceived = null;
@@ -276,21 +299,24 @@ export function createRelayController(options) {
   function command(action) {
     if (destroyed || !visible) return false;
     if (action !== 'start' && action !== 'stop') return false;
+    var desired = action === 'start';
     var age = lastReceived === null ? Infinity : now() - lastReceived;
-    if (!transportOpen || !lastStatus || !hasTokens(lastStatus) || age < 0 || age >= 6000 || lastStatus.camera !== 'ready' || lastStatus.canControl !== true || lastStatus.busy === true || pending || typeof lastStatus.recording !== 'boolean') {
+    var canStart = lastStatus && lastStatus.canStart === true;
+    var canStop = lastStatus && lastStatus.canStop === true && (!pending || pending.action === 'start');
+    if (!transportOpen || !lastStatus || !hasTokens(lastStatus) || age < 0 || age >= 6000 || lastStatus.camera !== 'ready' ||
+        (desired && (!canStart || pending)) || (!desired && !canStop)) {
       message = pending ? '等待上一条指令的相机确认' : '尚未就绪，请先连接手机和相机';
       emit();
       return false;
     }
-    var desired = action === 'start';
-    if (lastStatus.recording === desired) {
+    if ((desired && !canStart) || (!desired && !canStop)) {
       message = desired ? '相机已经在录像' : '相机已经停止录像';
       emit();
       return false;
     }
     sequence += 1;
     var id = prefix + '-' + sequence.toString(36);
-    pending = { id: id, action: action, sentAt: now(), session: lastStatus.session };
+    pending = { id: id, action: action, sentAt: now(), session: lastStatus.session, revision: lastStatus.revision };
     message = desired ? '正在请求开始录像' : '正在请求停止录像';
     emit();
     return send({ v: 1, type: 'command', id: id, action: action, session: lastStatus.session, ticket: lastStatus.ticket }, function (error, code) {
