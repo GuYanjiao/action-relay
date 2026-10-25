@@ -98,6 +98,9 @@ public final class DjiProtocolSelfTest {
         f.session.onBytes(DjiProtocol.frame(0x1d,3,0x20,command.sequence,new byte[]{0,0,0,0,0}));
         check(f.outcomes.isEmpty(),"successful ACK does not confirm recording");
         f.session.onBytes(cameraStatus(3));
+        check(f.outcomes.isEmpty(),"one recording push is not enough to confirm");
+        f.now+=500;
+        f.session.onBytes(cameraStatus(3));
         check(f.outcomes.equals(Arrays.asList("a:confirmed")),"actual camera push confirms recording");
         f.now+=4000;
         check(!f.session.canControlRecording(),"stale status blocks control");
@@ -105,10 +108,13 @@ public final class DjiProtocolSelfTest {
         check(f.outcomes.contains("stale:rejected"),"stale command rejected");
         f.session.onBytes(cameraStatus(3));
         f.session.setRecording(false,"stop");
-        f.now+=5001; f.session.tick(f.now);
+        f.now+=20001; f.session.tick(f.now);
         check(f.outcomes.contains("stop:unknown"),"no status confirmation -> unknown, not success");
         f.session.onBytes(cameraStatus(5));
         check(!f.status.isRecording() && f.status.isPreRecording(),"pre-record cache is distinct from actual recording");
+        f.session.onBytes(cameraStatus(1));
+        f.now+=500;
+        f.session.onBytes(cameraStatus(1));
         f.session.setRecording(true,"pre");
         f.session.disconnect();
         check(f.outcomes.contains("pre:unknown") && !f.ready,"disconnect never retries in-flight command");

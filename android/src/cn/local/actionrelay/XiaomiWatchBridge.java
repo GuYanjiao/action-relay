@@ -17,6 +17,7 @@ import com.xiaomi.xms.wearable.node.NodeApi;
 import com.xiaomi.xms.wearable.service.ServiceApi;
 import com.xiaomi.xms.wearable.service.OnServiceConnectionListener;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.List;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -38,6 +39,10 @@ public final class XiaomiWatchBridge {
     private boolean running,querying,authorizing,checking,registering;
     private String nodeId="",registeredNode="",lastState="",lastError="";
     private long lastErrorAt;
+    private long lastMessageAt;
+    private final ArrayDeque<String> outbound=new ArrayDeque<>();
+    private boolean sending;
+    private Runnable sendTimeout;
     private int generation;
 
     public XiaomiWatchBridge(Context context,Listener listener){
@@ -60,6 +65,7 @@ public final class XiaomiWatchBridge {
     }
     public void stop(){
         running=false;generation++;main.removeCallbacks(poll);querying=false;checking=false;registering=false;authorizing=false;
+        outbound.clear();sending=false;if(sendTimeout!=null)main.removeCallbacks(sendTimeout);sendTimeout=null;
         detach();nodeId="";
         if(service!=null)try{service.unregisterServiceConnectionListener(serviceListener);}catch(Exception ignored){}
         state("中转已关闭");
@@ -133,6 +139,7 @@ public final class XiaomiWatchBridge {
         final byte[] copy=bytes.clone();
         main.post(()->{
             if(!running||!id.equals(nodeId))return;
+            lastMessageAt=SystemClock.elapsedRealtime();
             String clean=normalize(new String(copy,StandardCharsets.UTF_8));
             if(clean==null){report("已忽略格式不符的手表消息",null);return;}
             state("已收到手表端消息");listener.onMessage(clean);
@@ -154,15 +161,35 @@ public final class XiaomiWatchBridge {
         }catch(Exception ignored){}
         return null;
     }
+    public boolean isWatchConnected(){
+        return running&&!registeredNode.isEmpty()&&lastMessageAt>0
+            &&SystemClock.elapsedRealtime()-lastMessageAt<=15000;
+    }
     public void send(String json){
         if(!running||messages==null||nodeId.isEmpty()||registeredNode.isEmpty()||json==null||json.length()>4096)return;
-        final String id=nodeId;final int run=generation;
+        boolean terminal=json.contains("\"type\":\"result\"");
+        if(terminal)outbound.addFirst(json);else{
+            outbound.removeIf(item->item.contains("\"type\":\"status\""));
+            outbound.addLast(json);
+        }
+        pumpSend();
+    }
+    private void pumpSend(){
+        if(sending||outbound.isEmpty()||!running||messages==null||nodeId.isEmpty())return;
+        final String id=nodeId;final int run=generation;final String json=outbound.removeFirst();sending=true;
         try{
-            messages.sendMessage(id,json.getBytes(StandardCharsets.UTF_8)).addOnFailureListener(error->main.post(()->{
-                if(!running||run!=generation||!id.equals(nodeId))return;
-                report("发送手表状态失败",error);
-            }));
-        }catch(Exception error){report("发送手表状态异常",error);}
+            messages.sendMessage(id,json.getBytes(StandardCharsets.UTF_8))
+                .addOnSuccessListener(ignored->main.post(()->finishSend(id,run,null)))
+                .addOnFailureListener(error->main.post(()->finishSend(id,run,error)));
+            sendTimeout=()->{if(sending)finishSend(id,run,new RuntimeException("发送超时"));};
+            main.postDelayed(sendTimeout,5000);
+        }catch(Exception error){finishSend(id,run,error);}
+    }
+    private void finishSend(String id,int run,Exception error){
+        if(run!=generation||!id.equals(nodeId)){sending=false;return;}
+        if(sendTimeout!=null)main.removeCallbacks(sendTimeout);sendTimeout=null;sending=false;
+        if(error!=null)report("发送手表消息失败",error);
+        pumpSend();
     }
     private void detach(){
         String old=registeredNode;registeredNode="";

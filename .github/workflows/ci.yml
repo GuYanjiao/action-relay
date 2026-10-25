@@ -1,0 +1,44 @@
+name: Validate
+
+on:
+  push:
+    branches: [main, 'work/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: watch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: watch/package-lock.json
+      - run: npm ci
+      - run: npm test
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: |
+          mkdir -p test-classes
+          javac --release 8 -encoding UTF-8 -d test-classes \
+            android/src/cn/local/actionrelay/protocol/*.java \
+            android/tests/cn/local/actionrelay/protocol/DjiSessionTransitionTest.java \
+            tests/protocol/cn/local/actionrelay/protocol/DjiProtocolSelfTest.java \
+            tests/transport/FrameQueueTest.java \
+            android/src/cn/local/actionrelay/FrameQueue.java
+          java -cp test-classes cn.local.actionrelay.protocol.DjiSessionTransitionTest
+          java -cp test-classes cn.local.actionrelay.protocol.DjiProtocolSelfTest tests/connect_cmd_frame.txt
+          java -cp test-classes FrameQueueTest
