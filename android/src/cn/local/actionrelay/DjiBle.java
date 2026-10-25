@@ -31,11 +31,7 @@ public final class DjiBle {
     private BluetoothGattCharacteristic write;
     private boolean scanning, discovering, ready, writing;
     private int mtu = 23;
-    private static final class Packet {
-        final byte[] bytes; final long deadline;
-        Packet(byte[] b) { bytes=b.clone();deadline=SystemClock.elapsedRealtime()+4000; }
-    }
-    private final ArrayDeque<Packet> queue = new ArrayDeque<>();
+    private final FrameQueue queue = new FrameQueue();
     private Runnable timeout, writeTimeout;
 
     public DjiBle(Context context, Listener listener) {
@@ -172,15 +168,21 @@ public final class DjiBle {
     };
     public void send(byte[] frame) {
         if(!ready || gatt==null || write==null) throw new IllegalStateException("相机通信未就绪");
-        if(queue.size()>128) throw new IllegalStateException("相机发送队列繁忙");
         if(frame.length>mtu-3) throw new IllegalStateException("指令超过协商MTU，未发送");
-        queue.add(new Packet(frame));
+        queue.offerControl(frame,SystemClock.elapsedRealtime());
         pump();
         if(!ready) throw new IllegalStateException("蓝牙发送失败，连接已关闭");
     }
+    public boolean sendGps(byte[] frame){
+        if(!ready||gatt==null||write==null||frame==null||frame.length>mtu-3)return false;
+        queue.offerGps(frame,SystemClock.elapsedRealtime());pump();return ready;
+    }
+    public boolean supportsGps(){return ready&&mtu>=69;}
+    public void clearGps(){queue.clearGps();}
     private void pump() {
-        if(writing || !ready || queue.isEmpty()) return;
-        Packet packet=queue.remove();
+        if(writing || !ready) return;
+        FrameQueue.Packet packet=queue.poll(SystemClock.elapsedRealtime());
+        if(packet==null)return;
         if(SystemClock.elapsedRealtime()>=packet.deadline){disconnect("指令在发送前已过期，未继续发送");return;}
         byte[] bytes=packet.bytes; writing=true; boolean sent;
         try {

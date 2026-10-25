@@ -1,16 +1,32 @@
 <template>
   <div class="page">
-    <text class="title">Action 遥控</text>
-    <div class="links">
-      <text class="link">{{phoneText}}</text>
-      <text class="link">{{cameraText}}</text>
+    <div class="remote" if="{{!toolsOpen}}">
+      <div class="heading">
+        <div class="{{ledClass}}"></div>
+        <text class="model">ACTION 4</text>
+      </div>
+      <div class="status-strip">
+        <div class="status-item"><image class="status-icon" src="{{phoneIcon}}"></image><text class="status-label">{{phoneLabel}}</text></div>
+        <div class="status-item"><image class="status-icon" src="{{cameraIcon}}"></image><text class="status-label">{{cameraLabel}}</text></div>
+        <div class="status-item"><image class="status-icon" src="{{gpsIcon}}"></image><text class="status-label">{{gpsLabel}}</text></div>
+        <div class="status-item"><image class="status-icon" src="{{batteryIcon}}"></image><text class="status-label">{{batteryLabel}}</text></div>
+      </div>
+      <text class="{{timerClass}}">{{timerText}}</text>
+      <div class="capture" onclick="tapCapture"><image class="capture-image" src="{{captureIcon}}"></image></div>
+      <text class="capture-label">{{captureLabel}}</text>
+      <div class="edge-tools">
+        <div class="edge-tool" onclick="refreshStatus"><image class="tool-icon" src="/common/ui/refresh.png"></image></div>
+        <div class="edge-tool" onclick="openTools"><image class="tool-icon" src="/common/ui/more.png"></image></div>
+      </div>
     </div>
-    <text class="record">{{recordText}}</text>
-    <text class="meta">{{metaText}}</text>
-    <input class="{{startClass}}" type="button" value="开始录像" disabled="{{!startEnabled}}" onclick="startRecording" />
-    <input class="{{stopClass}}" type="button" value="停止录像" disabled="{{!stopEnabled}}" onclick="stopRecording" />
-    <text class="note">{{noteText}}</text>
-    <text class="refresh" onclick="refreshStatus">刷新连接状态</text>
+    <div class="tools" if="{{toolsOpen}}">
+      <text class="tools-title">连接</text>
+      <div class="tools-row"><image class="row-icon" src="{{phoneIcon}}"></image><text class="row-text">{{phoneText}}</text></div>
+      <div class="tools-row"><image class="row-icon" src="{{cameraIcon}}"></image><text class="row-text">{{cameraText}}</text></div>
+      <text class="tools-note">{{noteText}}</text>
+      <div class="refresh-button" onclick="refreshStatus"><image class="row-icon" src="/common/ui/refresh.png"></image><text class="refresh-label">刷新状态</text></div>
+      <div class="back-button" onclick="closeTools"><image class="row-icon" src="/common/ui/back.png"></image><text class="back-label">返回</text></div>
+    </div>
   </div>
 </template>
 
@@ -19,15 +35,25 @@ import { createRelayController } from '../../common/relayController.js'
 
 export default {
   private: {
+    toolsOpen: false,
     phoneText: '手机：未连接',
     cameraText: '相机：未连接',
-    recordText: '状态未知',
-    metaText: '状态以相机回报为准',
-    noteText: '先在手机打开中转应用',
+    noteText: '请在手机开启中转',
+    phoneIcon: '/common/ui/phone-off.png',
+    cameraIcon: '/common/ui/camera-off.png',
+    gpsIcon: '/common/ui/gps-off.png',
+    batteryIcon: '/common/ui/battery-off.png',
+    phoneLabel: '未连',
+    cameraLabel: '未连',
+    gpsLabel: 'GPS 关',
+    batteryLabel: '—',
+    timerText: '--:--',
+    timerClass: 'timer',
+    ledClass: 'led led-off',
+    captureIcon: '/common/ui/capture-disabled.png',
+    captureLabel: '等待连接',
     startEnabled: false,
-    stopEnabled: false,
-    startClass: 'button button-off',
-    stopClass: 'button button-off'
+    stopEnabled: false
   },
   onInit() {
     this._relay = createRelayController({
@@ -38,43 +64,87 @@ export default {
       now: function () { return Date.now() },
       setTimer: function (fn, ms) { return setTimeout(fn, ms) },
       clearTimer: function (id) { clearTimeout(id) },
-      onState: (state) => {
-        this.phoneText = state.phoneText
-        this.cameraText = state.cameraText
-        this.recordText = state.recordText
-        this.metaText = state.metaText
-        this.noteText = state.noteText
-        this.startEnabled = state.startEnabled
-        this.stopEnabled = state.stopEnabled
-        this.startClass = state.startClass
-        this.stopClass = state.stopClass
-      }
+      onState: (state) => { this.applyState(state) }
     })
     this._relay.show()
   },
+  applyState(state) {
+    this.phoneText = state.phoneText || '手机：未连接'
+    this.cameraText = state.cameraText || '相机：未连接'
+    this.noteText = state.noteText || '状态以相机回报为准'
+    this.startEnabled = state.startEnabled === true
+    this.stopEnabled = state.stopEnabled === true
+    var phone = state.phoneConnected === true
+    var camera = state.cameraReady === true
+    var recording = state.recording === true
+    var phase = state.recordPhase || 'unknown'
+    var pending = state.pending === true || phase === 'starting' || phase === 'stopping'
+    this.phoneIcon = '/common/ui/phone-' + (phone ? 'on' : 'off') + '.png'
+    this.cameraIcon = '/common/ui/camera-' + (camera ? 'on' : 'off') + '.png'
+    this.phoneLabel = phone ? '已连' : '未连'
+    this.cameraLabel = camera ? '已连' : '未连'
+    this.batteryLabel = typeof state.battery === 'number' && state.battery >= 0 ? Math.floor(state.battery) + '%' : '—'
+    this.batteryIcon = '/common/ui/battery-' + (typeof state.battery === 'number' && state.battery >= 0 ? (state.battery <= 20 ? 'low' : 'on') : 'off') + '.png'
+    var gps = state.gpsState || 'off'
+    this.gpsIcon = '/common/ui/gps-' + (!state.gpsEnabled ? 'off' : gps === 'ready' ? 'on' : gps === 'denied' ? 'error' : 'wait') + '.png'
+    this.gpsLabel = !state.gpsEnabled ? 'GPS 关' : gps === 'ready' ? 'GPS' : gps === 'denied' ? '未授权' : '定位中'
+    var seconds = typeof state.recordSeconds === 'number' && state.recordSeconds >= 0 ? Math.floor(state.recordSeconds) : 0
+    this.timerText = !camera || phase === 'unknown' ? '--:--' : this.timeText(recording ? seconds : 0)
+    this.timerClass = recording ? 'timer timer-recording' : 'timer'
+    this.ledClass = recording ? 'led led-recording' : camera ? 'led led-ready' : 'led led-off'
+    if (this.stopEnabled) this.captureIcon = '/common/ui/capture-stop.png'
+    else if (this.startEnabled) this.captureIcon = '/common/ui/capture-record.png'
+    else this.captureIcon = '/common/ui/capture-' + (pending ? 'pending' : 'disabled') + '.png'
+    this.captureLabel = phase === 'stopping' ? '停止中' : phase === 'starting' ? '开始中' : recording ? '录像中' : this.startEnabled ? '待机' : !phone ? '手机未连接' : !camera ? '相机未连接' : pending ? '等待确认' : '等待状态'
+  },
+  timeText(seconds) {
+    var minutes = Math.floor(seconds / 60)
+    var remainder = seconds % 60
+    return (minutes < 10 ? '0' : '') + minutes + ':' + (remainder < 10 ? '0' : '') + remainder
+  },
   onShow() { if (this._relay) this._relay.show() },
   onHide() { if (this._relay) this._relay.hide() },
-  onDestroy() {
-    if (this._relay) this._relay.destroy()
-    this._relay = null
+  onDestroy() { if (this._relay) this._relay.destroy(); this._relay = null },
+  tapCapture() {
+    if (!this._relay) return
+    if (this.stopEnabled) this._relay.command('stop')
+    else if (this.startEnabled) this._relay.command('start')
   },
-  startRecording() { if (this._relay) this._relay.command('start') },
-  stopRecording() { if (this._relay) this._relay.command('stop') },
+  openTools() { this.toolsOpen = true },
+  closeTools() { this.toolsOpen = false },
   refreshStatus() { if (this._relay) this._relay.refresh() }
 }
 </script>
 
 <style>
-.page { width: 466px; height: 466px; flex-direction: column; align-items: center; background-color: #090e18; padding-top: 36px; }
-.title { width: 330px; height: 40px; text-align: center; font-size: 28px; color: #ffffff; }
-.links { width: 342px; height: 43px; flex-direction: row; align-items: center; }
-.link { width: 171px; font-size: 17px; color: #9fb2cb; text-align: center; }
-.record { width: 350px; height: 43px; text-align: center; font-size: 30px; color: #ffffff; }
-.meta { width: 350px; height: 29px; text-align: center; font-size: 17px; color: #9fb2cb; }
-.button { width: 300px; height: 58px; border-radius: 29px; margin-top: 10px; color: #ffffff; font-size: 25px; }
-.start-on { background-color: #1569bc; }
-.stop-on { background-color: #bc2949; }
-.button-off { background-color: #243244; color: #8f9cad; }
-.note { width: 334px; height: 49px; margin-top: 10px; font-size: 17px; text-align: center; color: #bed2e8; lines: 2; }
-.refresh { width: 250px; height: 29px; text-align: center; font-size: 17px; color: #7dbbfa; }
+.page { width: 466px; height: 466px; background-color: #08090b; }
+.remote { width: 466px; height: 466px; }
+.heading { position: absolute; left: 145px; top: 36px; width: 190px; height: 30px; flex-direction: row; align-items: center; }
+.led { width: 8px; height: 8px; border-radius: 4px; margin-right: 12px; }
+.led-off { background-color: #657080; }
+.led-ready { background-color: #6ad9a4; }
+.led-recording { background-color: #ff4b50; }
+.model { width: 160px; height: 30px; font-size: 21px; color: #e9edf3; }
+.status-strip { position: absolute; left: 93px; top: 77px; width: 280px; height: 51px; flex-direction: row; }
+.status-item { width: 70px; height: 51px; flex-direction: column; align-items: center; }
+.status-icon { width: 28px; height: 28px; }
+.status-label { width: 70px; height: 23px; font-size: 15px; color: #a9b2bf; text-align: center; }
+.timer { position: absolute; left: 98px; top: 135px; width: 270px; height: 45px; text-align: center; font-size: 39px; color: #f1f3f6; }
+.timer-recording { color: #ff6165; }
+.capture { position: absolute; left: 137px; top: 182px; width: 192px; height: 192px; align-items: center; justify-content: center; }
+.capture-image { width: 192px; height: 192px; }
+.capture-label { position: absolute; left: 108px; top: 373px; width: 250px; height: 27px; text-align: center; font-size: 19px; color: #e1e6ed; }
+.edge-tools { position: absolute; left: 151px; top: 402px; width: 164px; height: 50px; flex-direction: row; justify-content: space-between; }
+.edge-tool { width: 64px; height: 50px; border-radius: 25px; background-color: #1d2128; align-items: center; justify-content: center; }
+.tool-icon { width: 27px; height: 27px; }
+.tools { width: 466px; height: 466px; flex-direction: column; align-items: center; padding-top: 38px; }
+.tools-title { width: 270px; height: 46px; text-align: center; font-size: 27px; color: #f1f3f6; }
+.tools-row { width: 290px; height: 48px; flex-direction: row; align-items: center; }
+.row-icon { width: 27px; height: 27px; margin-right: 13px; }
+.row-text { width: 245px; font-size: 20px; color: #cbd3df; }
+.tools-note { width: 292px; height: 74px; font-size: 18px; color: #a6b0bf; lines: 3; margin-top: 10px; }
+.refresh-button { width: 280px; height: 64px; border-radius: 24px; background-color: #202630; flex-direction: row; align-items: center; justify-content: center; margin-top: 8px; }
+.refresh-label { font-size: 22px; color: #e9edf4; }
+.back-button { width: 202px; height: 62px; border-radius: 25px; background-color: #171b22; flex-direction: row; align-items: center; justify-content: center; margin-top: 12px; }
+.back-label { font-size: 21px; color: #b9c5d5; }
 </style>

@@ -5,10 +5,9 @@ import android.app.*;
 import android.bluetooth.BluetoothAdapter;
 import android.content.*;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.Insets;
-import android.graphics.drawable.GradientDrawable;
+import android.content.res.ColorStateList;
+import android.graphics.*;
+import android.graphics.drawable.*;
 import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
@@ -17,79 +16,238 @@ import android.widget.*;
 import org.json.JSONObject;
 import java.util.*;
 
+/** Native Android views, using the spacious cards and restrained color of HyperOS. */
 public final class MainActivity extends Activity implements RelayHub.UiListener {
+    private static final int BG=0xff101114,CARD=0xff1c1e23,SURFACE=0xff252830;
+    private static final int WHITE=0xfff2f4f7,MUTED=0xff9da6b5,BLUE=0xff86b7ff,GREEN=0xff6ad9a4,RED=0xffff555c,AMBER=0xffefb866;
     private RelayHub hub;
     private LinearLayout root,deviceRows;
-    private TextView state,detail,watch,record,battery,logs;
-    private Button enable,start,stop;
+    private TextView connectionTitle,timer,captureLabel,relayLabel,cameraHint,gpsDetail,logsView;
+    private StatusItem watchStatus,cameraStatus,batteryStatus,gpsStatus;
+    private CaptureView capture;
+    private IconView relayPower;
+    private Dialog panel;
+    private Switch gpsSwitch,autoSwitch;
+    private boolean resumed,pendingGpsReconfigure,bindingSwitches;
     private String deviceKey="";
-    private boolean showLogs;
+
     @Override public void onCreate(Bundle savedState){
         super.onCreate(savedState);hub=((RelayApp)getApplication()).hub;
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundColor(Color.rgb(10,16,26));
-        root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(24),dp(18),dp(24),dp(32));scroll.addView(root);
-        scroll.setOnApplyWindowInsetsListener((v,insets)->{Insets bars=insets.getInsets(WindowInsets.Type.systemBars());root.setPadding(dp(24),bars.top+dp(18),dp(24),bars.bottom+dp(32));return insets;});
+        getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setBackgroundColor(BG);
+        root=column();root.setPadding(dp(24),dp(18),dp(24),dp(26));scroll.addView(root);
+        scroll.setOnApplyWindowInsetsListener((v,insets)->{Insets bars=insets.getInsets(WindowInsets.Type.systemBars());root.setPadding(dp(24),bars.top+dp(14),dp(24),bars.bottom+dp(24));return insets;});
         setContentView(scroll);
-        text("Action 中转",31,Color.WHITE,true);
-        text("S4  →  小米手机  →  Action 4",15,0xff9caec4,false);
-        gap(22);state=text("未开启中转",25,0xff6dbaff,true);detail=text("",16,0xffd6e0ed,false);
-        gap(12);watch=text("等待手表连接",15,0xff9caec4,false);
-        record=text("录像状态未知",29,Color.WHITE,true);battery=text("",15,0xff9caec4,false);
-        gap(14);enable=button("开启手机中转",0xff247bcd,()->{if(hub.enabled)closeRelay();else requestStart();});
-        button("手表通信授权",0xff1a2b41,this::authorizeWatch);
-        text("首次连接时，按授权页面提示允许本应用与手表通信。",14,0xff9caec4,false);
-        gap(18);text("相机连接",20,Color.WHITE,true);
-        button("搜索附近的 Action 4",0xff1a2b41,()->{if(!hub.enabled){toast("请先开启手机中转");return;}if(!hub.ble.bluetoothEnabled()){startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));return;}hub.scan();});
-        deviceRows=new LinearLayout(this);deviceRows.setOrientation(LinearLayout.VERTICAL);root.addView(deviceRows);
-        text("相机需开机；首次连接请在相机上允许并核对4位验证码。",14,0xff9caec4,false);
-        gap(18);text("录像控制",20,Color.WHITE,true);
-        start=button("开始录像",0xff247bcd,()->hub.phoneCommand(true));
-        stop=button("停止录像",0xffa72f48,()->hub.phoneCommand(false));
-        text("先将相机设为普通视频模式。状态未确认时，按钮暂停使用。",14,0xff9caec4,false);
-        gap(18);button("本应用的系统设置",0xff1a2b41,()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))));
-        text("锁屏测试前，允许本应用和小米运动健康后台运行，并按系统提供的选项设置为不限制省电。",14,0xff9caec4,false);
-        button("重新申请相机配对",0xff1a2b41,()->new AlertDialog.Builder(this).setMessage("仅清除本应用保存的授权标记，并断开当前连接。之后需重新搜索相机。").setPositiveButton("继续",(d,w)->hub.forgetCamera()).setNegativeButton("取消",null).show());
-        button("查看连接记录",0xff1a2b41,()->{showLogs=!showLogs;render();});
-        logs=text("",13,0xff9caec4,false);logs.setTypeface(Typeface.MONOSPACE);logs.setTextIsSelectable(true);
-        text("测试版 0.2.0 · 需实机验证",13,0xff70849e,false);
+
+        LinearLayout header=row();header.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout heading=column();addText(heading,"Action",34,WHITE,true);addText(heading,"相机遥控",14,MUTED,false);
+        header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout power=column();power.setGravity(Gravity.CENTER);power.setBackground(ripple(SURFACE,26));
+        relayPower=new IconView("power",MUTED);power.addView(relayPower,new LinearLayout.LayoutParams(dp(27),dp(27)));
+        power.setContentDescription("开启或关闭手机中转");power.setOnClickListener(v->{if(hub.enabled)closeRelay();else requestStart();});
+        header.addView(power,new LinearLayout.LayoutParams(dp(64),dp(64)));root.addView(header);
+        gap(root,22);
+
+        LinearLayout statusCard=column();statusCard.setPadding(dp(20),dp(18),dp(20),dp(12));statusCard.setBackground(round(CARD,30));
+        LinearLayout cardHeader=row();cardHeader.setGravity(Gravity.CENTER_VERTICAL);
+        TextView model=label("ACTION 4",16,WHITE,true);cardHeader.addView(model,new LinearLayout.LayoutParams(0,-2,1));
+        relayLabel=label("中转关闭",12,MUTED,false);cardHeader.addView(relayLabel);statusCard.addView(cardHeader);
+        gap(statusCard,8);connectionTitle=addText(statusCard,"等待连接",21,WHITE,true);gap(statusCard,15);
+        LinearLayout indicators=row();
+        watchStatus=new StatusItem("watch");cameraStatus=new StatusItem("camera");batteryStatus=new StatusItem("battery");gpsStatus=new StatusItem("gps");
+        for(StatusItem item:new StatusItem[]{watchStatus,cameraStatus,batteryStatus,gpsStatus})indicators.addView(item,new LinearLayout.LayoutParams(0,dp(68),1));
+        watchStatus.setContentDescription("手表连接状态");cameraStatus.setContentDescription("相机连接状态");batteryStatus.setContentDescription("相机电量");gpsStatus.setContentDescription("手机GPS状态");
+        watchStatus.setOnClickListener(v->authorizeWatch());cameraStatus.setOnClickListener(v->showCameraPanel());gpsStatus.setOnClickListener(v->showGpsPanel());
+        statusCard.addView(indicators);root.addView(statusCard);
+
+        gap(root,26);timer=label("--:--",57,WHITE,false);timer.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL));timer.setGravity(Gravity.CENTER);root.addView(timer,new LinearLayout.LayoutParams(-1,dp(75)));
+        LinearLayout captureHolder=row();captureHolder.setGravity(Gravity.CENTER);capture=new CaptureView();capture.setOnClickListener(v->tapCapture());
+        captureHolder.addView(capture,new LinearLayout.LayoutParams(dp(168),dp(168)));root.addView(captureHolder);
+        gap(root,12);captureLabel=label("等待连接",17,MUTED,false);captureLabel.setGravity(Gravity.CENTER);root.addView(captureLabel,new LinearLayout.LayoutParams(-1,dp(32)));
+        gap(root,24);
+        LinearLayout toolbar=row();toolbar.setGravity(Gravity.CENTER);
+        toolbar.addView(toolButton("camera","相机",this::showCameraPanel),weightedTool());
+        toolbar.addView(toolButton("gps","GPS",this::showGpsPanel),weightedTool());
+        toolbar.addView(toolButton("more","工具",this::showToolsPanel),weightedTool());root.addView(toolbar);
+        gap(root,12);TextView footer=label("S4  ·  手机中转",12,0xff626b7a,false);footer.setGravity(Gravity.CENTER);root.addView(footer);
         render();
     }
-    @Override protected void onResume(){super.onResume();hub.addListener(this);render();}
-    @Override protected void onPause(){hub.removeListener(this);super.onPause();}
+
+    @Override protected void onResume(){super.onResume();resumed=true;hub.addListener(this);if(pendingGpsReconfigure)reconfigureGps();render();}
+    @Override protected void onPause(){resumed=false;hub.removeListener(this);super.onPause();}
+    @Override protected void onDestroy(){if(panel!=null)panel.dismiss();super.onDestroy();}
+    @Override public void onChanged(){runOnUiThread(this::render);}
+
+    private void tapCapture(){JSONObject s=hub.snapshot();if(s.optBoolean("canStop"))hub.phoneCommand(false);else if(s.optBoolean("canStart"))hub.phoneCommand(true);}
     private void requestStart(){
         ArrayList<String> needed=new ArrayList<>();
         for(String p:new String[]{Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT})if(checkSelfPermission(p)!=PackageManager.PERMISSION_GRANTED)needed.add(p);
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)needed.add(Manifest.permission.POST_NOTIFICATIONS);
         if(!needed.isEmpty()){requestPermissions(needed.toArray(new String[0]),12);return;}startRelay();
     }
-    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==12){
-        if(checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED)startRelay();
-        else toast("需要允许附近设备权限；可在本应用系统设置中修改");
-    }}
-    private void startRelay(){if(!hub.ble.bluetoothEnabled()){startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));toast("打开蓝牙后，再点击开启手机中转");return;}startForegroundService(new Intent(this,RelayService.class).setAction(RelayService.START));}
-    private void closeRelay(){new AlertDialog.Builder(this).setTitle("关闭手机中转？").setMessage("会断开遥控连接；相机若正在录像，会继续录像。").setPositiveButton("关闭中转",(d,w)->startService(new Intent(this,RelayService.class).setAction(RelayService.STOP))).setNegativeButton("取消",null).show();}
-    private void authorizeWatch(){hub.bridge.openAuthorization(this);}
-    @Override public void onChanged(){runOnUiThread(this::render);}
-    private void render(){
-        if(enable==null)return;
-        state.setText(hub.enabled?"ready".equals(hub.phase)?"相机已连接":"authorizing".equals(hub.phase)?"等待相机授权":"connecting".equals(hub.phase)?"正在连接相机":"中转已开启":"中转未开启");
-        JSONObject s=hub.snapshot();detail.setText(s.optString("message"));watch.setText("手表通信："+hub.watchMessage);
-        Object r=s.opt("recording");boolean known=r instanceof Boolean;boolean rec=known&&(Boolean)r;
-        record.setText(!known?"录像状态未知":rec?"● 正在录像":"相机未在录像");record.setTextColor(rec?0xffff6d8c:Color.WHITE);
-        int sec=s.optInt("recordSeconds",-1),bat=s.optInt("battery",-1);
-        battery.setText((bat>=0?"相机电量 "+bat+"%":"")+(known&&rec&&sec>=0?String.format(Locale.ROOT,"    %02d:%02d",sec/60,sec%60):""));
-        boolean control=s.optBoolean("canControl");start.setEnabled(control&&!rec);stop.setEnabled(control&&rec);start.setAlpha(start.isEnabled()?1f:.35f);stop.setAlpha(stop.isEnabled()?1f:.35f);
-        enable.setText(hub.enabled?"关闭手机中转":"开启手机中转");
-        String key=String.join("|",hub.candidates.keySet());
-        if(!key.equals(deviceKey)){deviceKey=key;deviceRows.removeAllViews();for(RelayHub.Candidate c:hub.candidates.values()){
-            Button row=new Button(this);row.setAllCaps(false);row.setText(c.name+"\n"+c.address);row.setTextColor(Color.WHITE);row.setBackgroundColor(0xff142337);
-            row.setOnClickListener(v->hub.connect(c.address));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(66));p.bottomMargin=dp(6);deviceRows.addView(row,p);
-        }}
-        logs.setVisibility(showLogs?View.VISIBLE:View.GONE);if(showLogs)logs.setText(String.join("\n\n",hub.logs));
+    private void requestGps(){
+        if(hub.gpsEnabled){hub.setGpsEnabled(false);reconfigureGps();render();return;}
+        if(!hub.enabled){toast("先开启手机中转，再打开GPS");render();requestStart();return;}
+        if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},13);return;
+        }
+        hub.setGpsEnabled(true);reconfigureGps();render();
     }
-    private TextView text(String content,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(content);t.setTextSize(size);t.setTextColor(color);t.setLineSpacing(dp(4),1f);if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(8);root.addView(t,p);return t;}
-    private Button button(String title,int color,Runnable action){Button b=new Button(this);b.setText(title);b.setAllCaps(false);b.setTextSize(17);b.setTextColor(Color.WHITE);GradientDrawable bg=new GradientDrawable();bg.setColor(color);bg.setCornerRadius(dp(14));b.setBackground(bg);b.setOnClickListener(v->action.run());LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(54));p.bottomMargin=dp(10);root.addView(b,p);return b;}
-    private void gap(int height){Space space=new Space(this);root.addView(space,new LinearLayout.LayoutParams(1,dp(height)));}
+    private void reconfigureGps(){
+        if(!resumed){pendingGpsReconfigure=true;return;}
+        pendingGpsReconfigure=false;
+        if(!hub.enabled)return;
+        try{startForegroundService(new Intent(this,RelayService.class).setAction(RelayService.RECONFIGURE));}
+        catch(RuntimeException e){toast("GPS暂未启动，请回到应用后重试");hub.log("界面启动GPS服务失败："+e.getClass().getSimpleName());}
+    }
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){
+        super.onRequestPermissionsResult(request,permissions,grants);
+        if(request==12){
+            if(checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED)startRelay();
+            else toast("需要附近设备权限，可在系统设置中修改");
+        }else if(request==13){
+            if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED&&hub.enabled){hub.setGpsEnabled(true);reconfigureGps();}
+            else {hub.setGpsEnabled(false);toast("GPS需要精确位置权限");}
+            render();
+        }
+    }
+    private void startRelay(){
+        if(!hub.ble.bluetoothEnabled()){startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));toast("打开蓝牙后，再点击电源键");return;}
+        startForegroundService(new Intent(this,RelayService.class).setAction(RelayService.START));
+    }
+    private void closeRelay(){new AlertDialog.Builder(this).setTitle("关闭手机中转？").setMessage("会断开遥控连接。相机若正在录像，会继续录像。").setPositiveButton("关闭中转",(d,w)->startService(new Intent(this,RelayService.class).setAction(RelayService.STOP))).setNegativeButton("取消",null).show();}
+    private void authorizeWatch(){hub.bridge.openAuthorization(this);}
+    private void scanCamera(){
+        if(!hub.enabled){toast("先开启手机中转");requestStart();return;}
+        if(!hub.ble.bluetoothEnabled()){startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));return;}
+        deviceKey="";hub.scan();
+    }
+
+    private void showCameraPanel(){
+        LinearLayout content=sheet("相机");
+        cameraHint=addText(content,"相机开机后，点击搜索",15,MUTED,false);gap(content,8);
+        addAction(content,"search","搜索相机",this::scanCamera);
+        if(hub.rememberedCameraAddress!=null&&!hub.rememberedCameraAddress.isEmpty()){
+            String name=hub.rememberedCameraName==null||hub.rememberedCameraName.isEmpty()?"上次的相机":hub.rememberedCameraName;
+            addAction(content,"reconnect","重连 · "+name,()->{if(!hub.enabled){toast("先开启手机中转");requestStart();return;}hub.reconnectRememberedCamera();});
+        }
+        deviceRows=column();content.addView(deviceRows);deviceKey="";
+        gap(content,12);addText(content,"首次连接，请在相机确认并核对验证码。",13,MUTED,false);
+        showSheet();render();
+    }
+    private void showGpsPanel(){
+        LinearLayout content=sheet("手机 GPS");
+        LinearLayout toggle=row();toggle.setGravity(Gravity.CENTER_VERTICAL);toggle.setMinimumHeight(dp(72));
+        TextView name=label("将定位发送到相机",17,WHITE,true);toggle.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+        gpsSwitch=new Switch(this);gpsSwitch.setContentDescription("开启或关闭GPS");gpsSwitch.setButtonTintList(ColorStateList.valueOf(BLUE));toggle.addView(gpsSwitch,new LinearLayout.LayoutParams(dp(72),dp(64)));content.addView(toggle);
+        gpsSwitch.setOnCheckedChangeListener((v,checked)->{if(!bindingSwitches&&checked!=hub.gpsEnabled)requestGps();});
+        gap(content,10);gpsDetail=addText(content,"",15,MUTED,false);
+        addAction(content,"settings","位置权限设置",this::openAppSettings);
+        addText(content,"请在户外定位。GPS就绪表示手机定位可发送；视频仪表盘仍以相机实际素材为准。",13,MUTED,false);
+        showSheet();render();
+    }
+    private void showToolsPanel(){
+        LinearLayout content=sheet("工具");
+        addAction(content,"key","手表通信授权",this::authorizeWatch);
+        addAction(content,"tile","添加快捷磁贴",()->RecordingTileService.requestAdd(this));
+        LinearLayout auto=row();auto.setMinimumHeight(dp(72));auto.setGravity(Gravity.CENTER_VERTICAL);auto.setPadding(dp(16),0,dp(10),0);auto.setBackground(round(SURFACE,22));
+        LinearLayout words=column();addText(words,"自动重连",17,WHITE,true);addText(words,"仅重连相机，不自动录像",12,MUTED,false);auto.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+        autoSwitch=new Switch(this);autoSwitch.setContentDescription("自动重连已记住的相机");auto.addView(autoSwitch,new LinearLayout.LayoutParams(dp(72),dp(64)));content.addView(auto,spaced(-1,dp(76),0,8));
+        autoSwitch.setOnCheckedChangeListener((v,checked)->{if(!bindingSwitches)hub.setAutoReconnect(checked);});
+        addAction(content,"settings","本应用的系统设置",this::openAppSettings);
+        addAction(content,"log","连接记录",this::showLogsPanel);
+        addAction(content,"refresh","重新配对相机",()->new AlertDialog.Builder(this).setTitle("重新配对相机？").setMessage("清除本应用保存的配对授权并断开连接。之后需重新搜索相机。").setPositiveButton("重新配对",(d,w)->hub.forgetCamera()).setNegativeButton("取消",null).show());
+        addAction(content,"info","使用提示",()->new AlertDialog.Builder(this).setTitle("使用提示").setMessage("相机请设为普通视频模式。首次连接需在相机确认验证码。\n\n锁屏使用前，允许本应用和小米运动健康后台运行，并按系统提供的选项设置为不限制省电。\n\n自动重连不会自动录像。状态未确认时，主键会暂停使用。").setPositiveButton("知道了",null).show());
+        gap(content,8);addText(content,"Action 中转 · 0.3.0",12,MUTED,false);showSheet();render();
+    }
+    private void showLogsPanel(){LinearLayout content=sheet("连接记录");logsView=addText(content,"",12,MUTED,false);logsView.setTypeface(Typeface.MONOSPACE);logsView.setTextIsSelectable(true);showSheet();render();}
+    private void openAppSettings(){startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}
+
+    private LinearLayout sheet(String title){
+        if(panel!=null)panel.dismiss();deviceRows=null;cameraHint=null;gpsDetail=null;logsView=null;gpsSwitch=null;autoSwitch=null;
+        panel=new Dialog(this);panel.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout body=column();body.setPadding(dp(22),dp(18),dp(22),dp(26));body.setBackground(round(CARD,32));
+        LinearLayout header=row();header.setGravity(Gravity.CENTER_VERTICAL);TextView name=label(title,26,WHITE,true);header.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+        FrameLayout close=new FrameLayout(this);close.setBackground(ripple(SURFACE,24));IconView closeIcon=new IconView("close",MUTED);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER);close.addView(closeIcon,ip);close.setContentDescription("关闭面板");close.setOnClickListener(v->panel.dismiss());header.addView(close,new LinearLayout.LayoutParams(dp(64),dp(64)));body.addView(header);gap(body,12);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        LinearLayout content=column();scroll.addView(content);int max=(int)(getResources().getDisplayMetrics().heightPixels*.72f);body.addView(scroll,new LinearLayout.LayoutParams(-1,Math.min(max,dp(540))));
+        panel.setContentView(body);return content;
+    }
+    private void showSheet(){panel.show();Window w=panel.getWindow();if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);WindowManager.LayoutParams p=w.getAttributes();p.dimAmount=.55f;p.gravity=Gravity.BOTTOM;p.width=-1;p.height=-2;w.setAttributes(p);w.setNavigationBarColor(CARD);}}
+
+    private void render(){
+        if(capture==null)return;JSONObject s=hub.snapshot();
+        boolean ready="ready".equals(hub.phase);boolean watchConnected=s.optBoolean("watchConnected",false);
+        Object truth=s.opt("recording");boolean known=truth instanceof Boolean;boolean rec=known&&(Boolean)truth;
+        String phase=s.optString("recordPhase","unknown");boolean canStart=s.optBoolean("canStart"),canStop=s.optBoolean("canStop");
+        String connection=ready?"已连接":"authorizing".equals(hub.phase)?"请在相机确认":"connecting".equals(hub.phase)?"连接中":"等待连接";
+        if("authorizing".equals(hub.phase)&&hub.verificationCode>0)connection="确认配对 · "+String.format(Locale.ROOT,"%04d",hub.verificationCode);
+        connectionTitle.setText(connection);relayLabel.setText(hub.enabled?"中转开启":"中转关闭");relayLabel.setTextColor(hub.enabled?BLUE:MUTED);relayPower.color=hub.enabled?BLUE:MUTED;relayPower.invalidate();
+        watchStatus.update(watchConnected?"已连接":"未连接",watchConnected?GREEN:MUTED);cameraStatus.update(ready?"已连接":"未连接",ready?GREEN:MUTED);
+        int battery=s.optInt("battery",-1);batteryStatus.update(battery>=0?battery+"%":"—",battery<0?MUTED:battery<=20?AMBER:WHITE);
+        String gps=s.optString("gpsState",hub.gpsState);boolean gpsOn=hub.gpsEnabled;int gpsColor=!gpsOn?MUTED:"ready".equals(gps)?GREEN:"denied".equals(gps)?RED:AMBER;
+        gpsStatus.update(!gpsOn?"关闭":"ready".equals(gps)?"已定位":"denied".equals(gps)?"未授权":"定位中",gpsColor);
+        int seconds=s.optInt("recordSeconds",-1);timer.setText(!ready||!known?"--:--":String.format(Locale.ROOT,"%02d:%02d",rec&&seconds>=0?seconds/60:0,rec&&seconds>=0?seconds%60:0));timer.setTextColor(rec?RED:WHITE);
+        capture.mode=canStop?2:canStart?1:"starting".equals(phase)||"stopping".equals(phase)?3:0;capture.setEnabled(canStart||canStop);capture.setContentDescription(canStop?"停止录像":canStart?"开始录像":"等待相机状态");capture.invalidate();
+        captureLabel.setText("stopping".equals(phase)?"停止中":"starting".equals(phase)?"开始中":rec?"录像中":canStart?"待机":!hub.enabled?"先开启中转":!ready?"等待相机连接":"等待状态");captureLabel.setTextColor(rec?RED:MUTED);
+        if(cameraHint!=null)cameraHint.setText(s.optString("message","相机开机后，点击搜索"));
+        if(deviceRows!=null){
+            String key=String.join("|",hub.candidates.keySet());if(!key.equals(deviceKey)){deviceKey=key;deviceRows.removeAllViews();for(RelayHub.Candidate candidate:hub.candidates.values()){
+                LinearLayout device=row();device.setGravity(Gravity.CENTER_VERTICAL);device.setPadding(dp(16),dp(12),dp(16),dp(12));device.setBackground(ripple(SURFACE,22));
+                IconView icon=new IconView("camera",BLUE);device.addView(icon,new LinearLayout.LayoutParams(dp(28),dp(28)));LinearLayout names=column();names.setPadding(dp(15),0,0,0);addText(names,candidate.name,16,WHITE,true);addText(names,candidate.address,12,MUTED,false);device.addView(names,new LinearLayout.LayoutParams(0,-2,1));device.setOnClickListener(v->hub.connect(candidate.address));deviceRows.addView(device,spaced(-1,dp(78),0,8));
+            }}
+        }
+        bindingSwitches=true;if(gpsSwitch!=null)gpsSwitch.setChecked(hub.gpsEnabled);if(autoSwitch!=null)autoSwitch.setChecked(hub.autoReconnectEnabled);bindingSwitches=false;
+        if(gpsDetail!=null){String quality="ready".equals(gps)?"已定位":"off".equals(gps)?"GPS已关闭":"denied".equals(gps)?"缺少精确位置权限":"stale".equals(gps)?"定位已过期":"paused".equals(gps)?"定位发送暂停":"quality".equals(gps)?"等待完整定位测量":"正在获取定位";float accuracy=hub.gpsAccuracy,speed=hub.gpsSpeed;gpsDetail.setText(quality+(accuracy>=0?String.format(Locale.ROOT,"\n精度 ±%.0f m",accuracy):"")+(speed>=0?String.format(Locale.ROOT,"\n速度 %.1f km/h",speed*3.6f):""));gpsDetail.setTextColor(gpsColor);}
+        if(logsView!=null)logsView.setText(String.join("\n\n",hub.logs));
+    }
+
+    private LinearLayout toolButton(String icon,String title,Runnable action){LinearLayout v=column();v.setGravity(Gravity.CENTER);v.setBackground(ripple(SURFACE,25));v.setMinimumHeight(dp(80));v.setContentDescription(title);v.setOnClickListener(w->action.run());v.addView(new IconView(icon,WHITE),new LinearLayout.LayoutParams(dp(28),dp(28)));gap(v,7);TextView text=label(title,13,MUTED,false);text.setGravity(Gravity.CENTER);v.addView(text);return v;}
+    private LinearLayout.LayoutParams weightedTool(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(88),1);p.leftMargin=dp(4);p.rightMargin=dp(4);return p;}
+    private void addAction(LinearLayout parent,String icon,String title,Runnable action){LinearLayout item=row();item.setGravity(Gravity.CENTER_VERTICAL);item.setPadding(dp(17),0,dp(15),0);item.setBackground(ripple(SURFACE,22));item.addView(new IconView(icon,BLUE),new LinearLayout.LayoutParams(dp(25),dp(25)));TextView text=label(title,17,WHITE,false);LinearLayout.LayoutParams textParams=new LinearLayout.LayoutParams(0,-2,1);textParams.leftMargin=dp(16);item.addView(text,textParams);item.addView(new IconView("chevron",MUTED),new LinearLayout.LayoutParams(dp(18),dp(18)));item.setContentDescription(title);item.setOnClickListener(v->action.run());parent.addView(item,spaced(-1,dp(68),0,8));}
+    private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
+    private LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.HORIZONTAL);return l;}
+    private TextView label(String content,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(content);t.setTextSize(size);t.setTextColor(color);t.setLineSpacing(dp(3),1f);if(bold)t.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));return t;}
+    private TextView addText(LinearLayout parent,String content,int size,int color,boolean bold){TextView t=label(content,size,color,bold);parent.addView(t,new LinearLayout.LayoutParams(-1,-2));return t;}
+    private void gap(LinearLayout parent,int height){Space space=new Space(this);parent.addView(space,new LinearLayout.LayoutParams(1,dp(height)));}
+    private LinearLayout.LayoutParams spaced(int width,int height,int top,int bottom){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(width,height);p.topMargin=dp(top);p.bottomMargin=dp(bottom);return p;}
+    private GradientDrawable round(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
+    private Drawable ripple(int color,int radius){return new RippleDrawable(ColorStateList.valueOf(0x22ffffff),round(color,radius),round(Color.WHITE,radius));}
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private void toast(String text){Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
+
+    private final class StatusItem extends LinearLayout {
+        final IconView icon;final TextView value;
+        StatusItem(String type){super(MainActivity.this);setOrientation(VERTICAL);setGravity(Gravity.CENTER);setMinimumHeight(dp(64));icon=new IconView(type,MUTED);addView(icon,new LinearLayout.LayoutParams(dp(27),dp(27)));Space gap=new Space(MainActivity.this);addView(gap,new LinearLayout.LayoutParams(1,dp(8)));value=label("—",12,MUTED,false);value.setGravity(Gravity.CENTER);addView(value);}
+        void update(String text,int color){value.setText(text);value.setTextColor(color);icon.color=color;icon.invalidate();}
+    }
+    private final class CaptureView extends View {
+        int mode;final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+        CaptureView(){super(MainActivity.this);setFocusable(true);setClickable(true);}
+        @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);float c=getWidth()/2f,r=Math.min(getWidth(),getHeight())/2f-dp(4);paint.setStyle(Paint.Style.FILL);paint.setColor(0xff16191f);canvas.drawCircle(c,c,r,paint);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(3));paint.setColor(mode==0?0xff414954:mode==3?AMBER:0xffe3e7ee);canvas.drawCircle(c,c,r,paint);paint.setStyle(Paint.Style.FILL);paint.setColor(mode==0?0xff303640:RED);if(mode==2)canvas.drawRoundRect(c-dp(31),c-dp(31),c+dp(31),c+dp(31),dp(12),dp(12),paint);else if(mode==3){paint.setColor(AMBER);for(int i=-1;i<=1;i++)canvas.drawCircle(c+dp(i*20),c,dp(5),paint);}else canvas.drawCircle(c,c,r-dp(17),paint);}
+    }
+    private final class IconView extends View {
+        final String kind;int color;final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+        IconView(String kind,int color){super(MainActivity.this);this.kind=kind;this.color=color;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        void line(Canvas c,float x1,float y1,float x2,float y2){c.drawLine(x1,y1,x2,y2,p);}
+        @Override protected void onDraw(Canvas c){super.onDraw(c);c.save();c.scale(getWidth()/24f,getHeight()/24f);p.setColor(color);p.setStrokeWidth(1.8f);p.setStyle(Paint.Style.STROKE);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
+            switch(kind){
+                case "watch":c.drawRoundRect(6,5,18,19,3,3,p);line(c,9,2,15,2);line(c,9,22,15,22);line(c,11,8,11,12);line(c,11,12,14,14);break;
+                case "camera":c.drawRoundRect(2.5f,5,21.5f,20,3,3,p);c.drawCircle(14.5f,12.5f,4,p);line(c,5.5f,8,8.5f,8);line(c,5.5f,16.5f,8,16.5f);break;
+                case "gps":c.drawCircle(12,12,7,p);c.drawCircle(12,12,2.5f,p);line(c,12,2,12,5);line(c,12,19,12,22);line(c,2,12,5,12);line(c,19,12,22,12);break;
+                case "battery":c.drawRoundRect(2,6,20,18,2,2,p);line(c,22,10,22,14);for(int x=5;x<17;x+=3)line(c,x,9,x,15);break;
+                case "power":c.drawArc(new RectF(4,4,20,20),-50,280,false,p);line(c,12,2,12,11);break;
+                case "search":c.drawCircle(10,10,6,p);line(c,14.5f,14.5f,21,21);break;
+                case "close":line(c,6,6,18,18);line(c,18,6,6,18);break;
+                case "chevron":line(c,9,5,16,12);line(c,16,12,9,19);break;
+                case "key":c.drawCircle(8,8,4,p);line(c,11,11,21,21);line(c,16,16,19,13);line(c,19,19,22,16);break;
+                case "tile":for(int x=3;x<20;x+=11)for(int y=3;y<20;y+=11)c.drawRoundRect(x,y,x+7,y+7,1.5f,1.5f,p);break;
+                case "log":c.drawRoundRect(5,3,19,21,2,2,p);for(int y=7;y<19;y+=5)line(c,8,y,16,y);break;
+                case "info":c.drawCircle(12,12,9,p);line(c,12,11,12,17);c.drawCircle(12,7,.5f,p);break;
+                case "settings":c.drawCircle(12,12,6,p);c.drawCircle(12,12,2.5f,p);for(int i=0;i<8;i++){double a=i*Math.PI/4;line(c,12+(float)Math.cos(a)*8,12+(float)Math.sin(a)*8,12+(float)Math.cos(a)*10,12+(float)Math.sin(a)*10);}break;
+                case "refresh":case "reconnect":c.drawArc(new RectF(4,4,20,20),30,285,false,p);line(c,20,3,20,9);line(c,20,9,14,9);break;
+                default:p.setStyle(Paint.Style.FILL);c.drawCircle(5,12,1.5f,p);c.drawCircle(12,12,1.5f,p);c.drawCircle(19,12,1.5f,p);break;
+            }c.restore();
+        }
+    }
 }

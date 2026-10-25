@@ -184,10 +184,13 @@ public final class DjiProtocol {
 
     public static final class CameraStatus {
         public final int mode, cameraState, recordingSeconds, batteryPercent, temperatureState;
+        public final int powerMode, nextMode;
         public final long receivedAtMs;
         CameraStatus(byte[] payload, long nowMs) {
             mode = u8(payload[0]); cameraState = u8(payload[1]);
             recordingSeconds = u16(payload, 5);
+            powerMode = payload.length > 28 ? u8(payload[28]) : -1;
+            nextMode = payload.length > 29 ? u8(payload[29]) : -1;
             temperatureState = payload.length > 30 ? u8(payload[30]) : -1;
             int battery = payload.length > 37 ? u8(payload[37]) : -1;
             batteryPercent = battery <= 100 ? battery : -1;
@@ -196,8 +199,15 @@ public final class DjiProtocol {
         public boolean isNormalVideoMode() { return mode == 1; }
         public boolean isRecording() { return isNormalVideoMode() && cameraState == 3; }
         public boolean isPreRecording() { return isNormalVideoMode() && cameraState == 5; }
-        public boolean isControllableState() {
+        public boolean isExplicitlyStopped() {
+            return isNormalVideoMode() && (cameraState == 1 || cameraState == 5);
+        }
+        public boolean hasKnownRecordingState() {
             return isNormalVideoMode() && (cameraState == 1 || cameraState == 3 || cameraState == 5);
+        }
+        public boolean isModeTransition() { return nextMode >= 0 && nextMode != mode; }
+        public boolean isControllableState() {
+            return hasKnownRecordingState();
         }
     }
 
