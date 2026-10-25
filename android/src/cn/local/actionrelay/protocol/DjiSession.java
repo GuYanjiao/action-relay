@@ -1,10 +1,9 @@
 package cn.local.actionrelay.protocol;
 
-/**
- * Single-thread-confined DJI Action 4 control session. Invoke all methods on one
- * Android Handler/executor. Transport must queue frames in order and report BLE
- * failures by disconnecting the session; GATT write success is not camera success.
- */
+import java.util.ArrayList;
+import java.util.List;
+
+/** Single-thread-confined DJI session. The transport serializes complete frames. */
 public final class DjiSession {
     public interface Clock { long nowMs(); }
     public interface Transport { void send(byte[] frame) throws Exception; }
@@ -17,8 +16,12 @@ public final class DjiSession {
     }
 
     public static final long STATUS_FRESH_MS = 3000;
-    public static final long COMMAND_TIMEOUT_MS = 5000;
+    public static final long COMMAND_TIMEOUT_MS = 8000;
+    public static final long STOP_TIMEOUT_MS = 20000;
+    public static final long LATE_CONFIRMATION_MS = 30000;
     public static final long HANDSHAKE_TIMEOUT_MS = 35000;
+    private static final long TARGET_SAMPLE_GAP_MS = 250;
+    private static final long STATUS_RECOVERY_INTERVAL_MS = 2000;
     private final Clock clock;
     private final Transport transport;
     private final Listener listener;
@@ -27,22 +30,28 @@ public final class DjiSession {
     private final DjiProtocol.StreamDecoder decoder = new DjiProtocol.StreamDecoder();
     private String phase = "idle";
     private int sequence, handshakeSequence;
-    private long handshakeDeadline;
+    private long handshakeDeadline, statusGeneration, revision;
     private DjiProtocol.CameraStatus status;
-    private long statusGeneration;
-    private Pending pending;
+    private Pending pending, recovery;
+    private long recoveryDeadline, lastStatusRecoveryAt;
     private boolean staleLogged;
+    private int lastKnownMode = -1;
 
     private static final class Pending {
         final int sequence;
-        final String requestId;
         final boolean desired;
-        final long deadline, statusGeneration;
-        boolean acknowledged;
-        Pending(int seq, String id, boolean desired, long now, long generation) {
-            sequence = seq; requestId = id; this.desired = desired;
-            deadline = now + COMMAND_TIMEOUT_MS; statusGeneration = generation;
+        final long sentAt, deadline, statusGeneration, minimumSettleMs;
+        final List<String> requestIds = new ArrayList<String>();
+        int ackCode = -1, matchingSamples;
+        long firstMatchingAt = -1, lastMatchingAt = -1;
+        Pending(int seq, String id, boolean desired, long now, long generation, boolean coversStart) {
+            sequence = seq; this.desired = desired; sentAt = now;
+            deadline = now + (desired ? COMMAND_TIMEOUT_MS : STOP_TIMEOUT_MS);
+            statusGeneration = generation;
+            minimumSettleMs = desired ? 0 : (coversStart ? 1000 : 500);
+            requestIds.add(id);
         }
+        void clearEvidence() { matchingSamples = 0; firstMatchingAt = lastMatchingAt = -1; }
     }
 
     public DjiSession(Clock clock, Transport transport, Listener listener,
@@ -53,23 +62,37 @@ public final class DjiSession {
         this.clock = clock; this.transport = transport; this.listener = listener;
         this.controllerId = controllerId; this.identity = identity6.clone();
     }
-
     private int nextSequence() { sequence = (sequence + 1) & 0xffff; if (sequence == 0) sequence = 1; return sequence; }
     public String getPhase() { return phase; }
     public boolean isReady() { return "ready".equals(phase); }
     public DjiProtocol.CameraStatus getStatus() { return status; }
     public long getStatusAgeMs() { return status == null ? Long.MAX_VALUE : Math.max(0, clock.nowMs() - status.receivedAtMs); }
-    public boolean canControlRecording() {
-        return isReady() && status != null && getStatusAgeMs() <= STATUS_FRESH_MS
-                && status.isControllableState() && pending == null;
+    public long getRevision() { return revision; }
+    public boolean isBusy() { return pending != null; }
+    public Boolean getPendingDesired() {
+        return pending != null ? Boolean.valueOf(pending.desired)
+                : recovery != null ? Boolean.valueOf(recovery.desired) : null;
     }
+    public String getCommandPhase() {
+        return pending != null ? (pending.desired ? "starting" : "stopping")
+                : recovery != null ? "recovering" : "idle";
+    }
+    public boolean canStartRecording() {
+        return isReady() && pending == null && recovery == null && status != null
+                && getStatusAgeMs() <= STATUS_FRESH_MS && status.isExplicitlyStopped();
+    }
+    public boolean canStopRecording() {
+        if (!isReady() || lastKnownMode != 1) return false;
+        if (pending != null) return pending.desired;
+        if (recovery != null) return true;
+        return status != null && getStatusAgeMs() <= STATUS_FRESH_MS && status.isRecording();
+    }
+    public boolean canControlRecording() { return canStartRecording() || canStopRecording(); }
 
     public void startHandshake(boolean firstPairing, int verificationCode) {
-        if ("handshaking".equals(phase) || isReady()) {
-            listener.onLog("连接流程已在进行，未重复请求"); return;
-        }
-        phase = "handshaking"; status = null; pending = null;
-        decoder.reset(); staleLogged = false;
+        if ("handshaking".equals(phase) || isReady()) { listener.onLog("连接流程已在进行，未重复请求"); return; }
+        phase = "handshaking"; status = null; pending = recovery = null; lastKnownMode = -1;
+        decoder.reset(); staleLogged = false; revision++;
         listener.onReady(false);
         handshakeSequence = nextSequence();
         handshakeDeadline = clock.nowMs() + HANDSHAKE_TIMEOUT_MS;
@@ -81,14 +104,11 @@ public final class DjiSession {
                     + String.format(java.util.Locale.ROOT, "%04d", verificationCode));
         } catch (Exception error) { failHandshake("连接请求发送失败：" + safeMessage(error)); }
     }
-
     public void onBytes(byte[] bytes) {
         if (!"handshaking".equals(phase) && !isReady()) return;
-        try {
-            for (DjiProtocol.Frame frame : decoder.feed(bytes)) handle(frame);
-        } catch (IllegalArgumentException error) { listener.onLog("已忽略无效通知：" + safeMessage(error)); }
+        try { for (DjiProtocol.Frame frame : decoder.feed(bytes)) handle(frame); }
+        catch (IllegalArgumentException error) { listener.onLog("已忽略无效通知：" + safeMessage(error)); }
     }
-
     private void handle(DjiProtocol.Frame frame) {
         if (isReady() && frame.is(0, 0x19) && !frame.isResponse()
                 && frame.payload.length >= 33 && DjiProtocol.u8(frame.payload[26]) == 2) {
@@ -96,10 +116,8 @@ public final class DjiSession {
                     || DjiProtocol.u16(frame.payload, 27) != 0) {
                 failHandshake("相机撤销授权或返回了不同设备标识"); return;
             }
-            try {
-                // Retransmitted camera authorization is answered idempotently.
-                transport.send(DjiProtocol.connectionResponse(frame.sequence, controllerId));
-            } catch (Exception error) { failHandshake("授权应答发送失败：" + safeMessage(error)); }
+            try { transport.send(DjiProtocol.connectionResponse(frame.sequence, controllerId)); }
+            catch (Exception error) { failHandshake("授权应答发送失败：" + safeMessage(error)); }
             return;
         }
         if (frame.is(0, 0x19) && "handshaking".equals(phase)) {
@@ -108,27 +126,23 @@ public final class DjiSession {
                 if (frame.payload.length < 5) { failHandshake("相机连接应答长度不足"); return; }
                 int result = DjiProtocol.u8(frame.payload[4]);
                 if (result != 0) { failHandshake("相机连接请求返回错误 " + result); return; }
-                listener.onLog("相机已受理连接请求，等待相机授权结果");
-                return;
+                listener.onLog("相机已受理连接请求，等待相机授权结果"); return;
             }
             if (frame.payload.length < 33 || DjiProtocol.u8(frame.payload[26]) != 2) {
                 failHandshake("相机授权数据格式不符合预期"); return;
             }
-            int result = DjiProtocol.u16(frame.payload, 27);
-            if (result != 0) { failHandshake("相机拒绝连接，不会自动重复配对"); return; }
+            if (DjiProtocol.u16(frame.payload, 27) != 0) { failHandshake("相机拒绝连接，不会自动重复配对"); return; }
             long cameraId = DjiProtocol.u32(frame.payload, 0);
             if (cameraId != DjiProtocol.ACTION_4_DEVICE_ID) {
                 failHandshake("检测到的相机设备标识不是 Action 4：0x" + Long.toHexString(cameraId)); return;
             }
             try {
-                // Camera's active request uses its own SEQ; echo it in this response.
                 transport.send(DjiProtocol.connectionResponse(frame.sequence, controllerId));
                 if (!"handshaking".equals(phase)) return;
                 phase = "ready";
                 transport.send(DjiProtocol.subscribeStatus(nextSequence()));
                 if (!isReady()) return;
-                listener.onReady(true);
-                listener.onLog("协议已连接，等待相机状态");
+                revision++; listener.onReady(true); listener.onLog("协议已连接，等待相机状态");
             } catch (Exception error) { failHandshake("连接确认发送失败：" + safeMessage(error)); }
             return;
         }
@@ -136,77 +150,128 @@ public final class DjiSession {
         if (frame.is(0x1d, 2) && !frame.isResponse()) {
             if (frame.payload.length < 7) { listener.onLog("已忽略过短相机状态"); return; }
             status = DjiProtocol.cameraStatus(frame, clock.nowMs());
-            statusGeneration++;
-            staleLogged = false;
+            statusGeneration++; revision++; lastKnownMode = status.mode; staleLogged = false;
             listener.onStatus(status);
-            if (pending != null && statusGeneration > pending.statusGeneration
-                    && status.isNormalVideoMode()
-                    && ((pending.desired && status.cameraState == 3)
-                      || (!pending.desired && (status.cameraState == 1 || status.cameraState == 5)))) {
-                complete("confirmed", pending.desired ? "相机已确认开始录像" : "相机已确认停止录像");
+            if (pending != null) observeTarget(pending, false);
+            else if (recovery != null) {
+                if (clock.nowMs() >= recoveryDeadline) { recovery = null; revision++; }
+                else observeTarget(recovery, true);
             }
             return;
         }
-        if (frame.is(0x1d, 3) && frame.isResponse() && pending != null
-                && frame.sequence == pending.sequence) {
+        if (frame.is(0x1d, 3) && frame.isResponse()) {
+            Pending operation = pending != null && frame.sequence == pending.sequence ? pending
+                    : recovery != null && frame.sequence == recovery.sequence ? recovery : null;
+            if (operation == null) return;
             if (frame.payload.length < 1) { listener.onLog("录像命令应答长度不足，继续等待状态"); return; }
-            int result = DjiProtocol.u8(frame.payload[0]);
-            if (result != 0) complete("failed", "相机拒绝录像命令，错误码 " + result);
-            else {
-                pending.acknowledged = true;
-                listener.onLog("录像命令已应答，等待相机实际状态确认");
-            }
+            operation.ackCode = DjiProtocol.u8(frame.payload[0]); revision++;
+            listener.onLog(operation.ackCode == 0
+                    ? (operation.desired ? "开始指令已受理，等待实际录像状态" : "停止指令已受理，等待相机结束录像及状态确认")
+                    : "相机返回码 " + operation.ackCode + "，继续核对实际录像状态");
         }
     }
-
+    private void observeTarget(Pending operation, boolean late) {
+        if (statusGeneration <= operation.statusGeneration) return;
+        boolean matches = operation.desired ? status.isRecording() : status.isExplicitlyStopped();
+        if (!matches) { operation.clearEvidence(); return; }
+        long now = clock.nowMs();
+        if (operation.firstMatchingAt < 0) {
+            operation.firstMatchingAt = operation.lastMatchingAt = now; operation.matchingSamples = 1;
+        } else if (now - operation.lastMatchingAt >= TARGET_SAMPLE_GAP_MS) {
+            operation.lastMatchingAt = now; operation.matchingSamples++;
+        }
+        if (operation.matchingSamples < 2 || now - operation.firstMatchingAt < TARGET_SAMPLE_GAP_MS
+                || now - operation.sentAt < operation.minimumSettleMs) return;
+        if (late) recovery = null; else pending = null;
+        revision++;
+        result(operation, "confirmed", (late ? "相机迟到回报：" : "")
+                + (operation.desired ? "已确认开始录像" : "已确认停止录像"));
+    }
     public boolean setRecording(boolean desired, String requestId) {
         if (requestId == null || requestId.length() == 0) throw new IllegalArgumentException("requestId required");
-        if (!canControlRecording()) {
-            listener.onCommandResult(requestId, desired, "rejected",
-                    pending != null ? "上一条指令尚未确认" : "相机未就绪、状态已过期或未处于普通视频模式");
-            return false;
-        }
-        if (status.isRecording() == desired) {
-            listener.onCommandResult(requestId, desired, "confirmed",
-                    desired ? "相机当前已在录像" : "相机当前未在录像");
+        if (pending != null && pending.desired == desired) {
+            if (!pending.requestIds.contains(requestId)) pending.requestIds.add(requestId);
+            listener.onLog(desired ? "开始请求仍在确认，未重复发送" : "停止请求仍在确认，未重复发送");
             return true;
         }
+        if (pending == null && recovery == null && isReady() && status != null
+                && getStatusAgeMs() <= STATUS_FRESH_MS && status.hasKnownRecordingState()
+                && status.isRecording() == desired) {
+            listener.onCommandResult(requestId, desired, "confirmed",
+                    desired ? "相机最新状态已在录像" : "相机最新状态已停止录像");
+            return true;
+        }
+        if (desired ? !canStartRecording() : !canStopRecording()) {
+            listener.onCommandResult(requestId, desired, "rejected",
+                    desired ? "相机未就绪、状态过期或另一请求尚待确认" : "当前没有可停止的已知录像或未决开始请求");
+            return false;
+        }
+        boolean coversStart = !desired && ((pending != null && pending.desired)
+                || (recovery != null && recovery.desired));
+        boolean supersededWhilePending = pending != null;
+        Pending superseded = supersededWhilePending ? pending : recovery;
+        recovery = null;
         int seq = nextSequence();
-        pending = new Pending(seq, requestId, desired, clock.nowMs(), statusGeneration);
+        Pending operation = new Pending(seq, requestId, desired, clock.nowMs(), statusGeneration, coversStart);
+        pending = operation; revision++; lastStatusRecoveryAt = clock.nowMs();
+        if (supersededWhilePending && superseded.desired)
+            result(superseded, "unknown", "开始请求已被停止请求覆盖，不会自动重发开始");
+        if (!isReady() || pending != operation) return false;
         try { transport.send(DjiProtocol.recording(seq, desired)); }
-        catch (Exception error) { complete("failed", "命令未能发送：" + safeMessage(error)); return false; }
+        catch (Exception error) {
+            if (pending == operation) { pending = null; revision++; result(operation,"failed","命令未能发送：" + safeMessage(error)); }
+            return false;
+        }
         if (!isReady()) return false;
-        listener.onLog(desired ? "已发送开始录像，等待相机确认" : "已发送停止录像，等待相机确认");
+        listener.onLog(desired ? "已发送开始录像，等待相机确认" : "已发送停止录像，正在等待相机停止及状态确认");
         return true;
     }
-
     public void tick(long nowMs) {
         if ("handshaking".equals(phase) && nowMs >= handshakeDeadline) {
             failHandshake("等待相机授权超时，请在相机上确认后重新连接"); return;
         }
-        if (pending != null && nowMs >= pending.deadline)
-            complete("unknown", pending.acknowledged ? "相机已应答，但录像结果未确认" : "录像命令结果未确认，请查看相机");
+        if (pending != null && nowMs >= pending.deadline) {
+            Pending timedOut = pending; pending = null; recovery = timedOut;
+            recovery.clearEvidence(); recoveryDeadline = nowMs + LATE_CONFIRMATION_MS; revision++;
+            boolean knownRejected = timedOut.ackCode > 0 && status != null
+                    && getStatusAgeMs() <= STATUS_FRESH_MS && status.hasKnownRecordingState()
+                    && status.isRecording() != timedOut.desired;
+            result(timedOut, knownRejected ? "failed" : "unknown", knownRejected
+                    ? "相机返回错误码 " + timedOut.ackCode + "，目标状态未达成；将继续同步"
+                    : timedOut.desired ? "开始结果尚未确认，将继续同步相机状态；不会自动重发"
+                    : "停止结果仍未确认，将继续同步；请查看相机实际状态");
+        }
+        if (recovery != null && nowMs >= recoveryDeadline) {
+            recovery = null; revision++; listener.onLog("迟到确认窗口已结束，请以相机最新状态为准");
+        }
+        if (isReady() && (pending != null || recovery != null)
+                && getStatusAgeMs() > STATUS_RECOVERY_INTERVAL_MS
+                && nowMs - lastStatusRecoveryAt >= STATUS_RECOVERY_INTERVAL_MS) {
+            lastStatusRecoveryAt = nowMs;
+            try { transport.send(DjiProtocol.subscribeStatus(nextSequence())); }
+            catch (Exception error) { listener.onLog("状态同步请求未能发送：" + safeMessage(error)); }
+        }
         if (isReady() && status != null && nowMs - status.receivedAtMs > STATUS_FRESH_MS && !staleLogged) {
             staleLogged = true;
-            listener.onLog("相机状态已过期，暂停录像按钮，等待新状态");
+            listener.onLog(pending != null && !pending.desired
+                    ? "停止请求已发送，正在恢复相机状态回报"
+                    : "相机状态已过期，等待新状态；未确认的开始仍可请求停止");
         }
     }
-
     public void disconnect() {
         phase = "disconnected";
-        if (pending != null) complete("unknown", "连接已断开，录像结果未确认；不会重发旧指令");
-        status = null; decoder.reset(); listener.onReady(false);
+        Pending interrupted = pending; pending = recovery = null;
+        status = null; lastKnownMode = -1; decoder.reset(); revision++;
+        if (interrupted != null) result(interrupted, "unknown", "连接已断开，录像结果未确认；不会重发旧指令");
+        listener.onReady(false);
     }
-
     private void failHandshake(String reason) {
-        phase = "failed"; status = null; decoder.reset();
+        phase = "failed"; status = null; lastKnownMode = -1; decoder.reset(); revision++;
         listener.onReady(false); listener.onLog(reason); listener.onDisconnectRequired(reason);
     }
-    private void complete(String outcome, String message) {
-        Pending result = pending;
-        if (result == null) return;
-        pending = null;
-        listener.onCommandResult(result.requestId, result.desired, outcome, message);
+    private void result(Pending operation, String outcome, String message) {
+        for (String id : new ArrayList<String>(operation.requestIds))
+            listener.onCommandResult(id, operation.desired, outcome, message);
     }
     private static String safeMessage(Exception error) {
         String text = error.getMessage(); return text == null ? error.getClass().getSimpleName() : text;
