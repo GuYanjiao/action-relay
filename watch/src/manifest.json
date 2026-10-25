@@ -1,0 +1,14 @@
+{
+  "package": "cn.local.actionrelay",
+  "name": "Action遥控",
+  "versionName": "0.2.0",
+  "versionCode": 2,
+  "minAPILevel": 1,
+  "minPlatformVersion": 1200,
+  "icon": "/common/logo.png",
+  "deviceTypeList": ["watch"],
+  "features": [{"name": "system.interconnect"}],
+  "config": {"logLevel": "error", "designWidth": 466},
+  "router": {"entry": "pages/index", "pages": {"pages/index": {"component": "index"}}},
+  "display": {"backgroundColor": "#090e18"}
+}

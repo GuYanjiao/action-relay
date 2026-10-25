@@ -1,0 +1,7 @@
+{
+  "name": "action-relay-watch",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {"build": "aiot build", "test": "node tests/controller.test.mjs", "test:compiled": "node tests/compiled.test.mjs"},
+  "devDependencies": {"aiot-toolkit": "2.0.5", "@aiot-toolkit/jsc": "1.0.3"}
+}

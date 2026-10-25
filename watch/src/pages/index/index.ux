@@ -1,0 +1,80 @@
+<template>
+  <div class="page">
+    <text class="title">Action 遥控</text>
+    <div class="links">
+      <text class="link">{{phoneText}}</text>
+      <text class="link">{{cameraText}}</text>
+    </div>
+    <text class="record">{{recordText}}</text>
+    <text class="meta">{{metaText}}</text>
+    <input class="{{startClass}}" type="button" value="开始录像" disabled="{{!startEnabled}}" onclick="startRecording" />
+    <input class="{{stopClass}}" type="button" value="停止录像" disabled="{{!stopEnabled}}" onclick="stopRecording" />
+    <text class="note">{{noteText}}</text>
+    <text class="refresh" onclick="refreshStatus">刷新连接状态</text>
+  </div>
+</template>
+
+<script>
+import { createRelayController } from '../../common/relayController.js'
+
+export default {
+  private: {
+    phoneText: '手机：未连接',
+    cameraText: '相机：未连接',
+    recordText: '状态未知',
+    metaText: '状态以相机回报为准',
+    noteText: '先在手机打开中转应用',
+    startEnabled: false,
+    stopEnabled: false,
+    startClass: 'button button-off',
+    stopClass: 'button button-off'
+  },
+  onInit() {
+    this._relay = createRelayController({
+      loadConnection: function () {
+        var interconnect = require('@system.interconnect')
+        return interconnect.instance()
+      },
+      now: function () { return Date.now() },
+      setTimer: function (fn, ms) { return setTimeout(fn, ms) },
+      clearTimer: function (id) { clearTimeout(id) },
+      onState: (state) => {
+        this.phoneText = state.phoneText
+        this.cameraText = state.cameraText
+        this.recordText = state.recordText
+        this.metaText = state.metaText
+        this.noteText = state.noteText
+        this.startEnabled = state.startEnabled
+        this.stopEnabled = state.stopEnabled
+        this.startClass = state.startClass
+        this.stopClass = state.stopClass
+      }
+    })
+    this._relay.show()
+  },
+  onShow() { if (this._relay) this._relay.show() },
+  onHide() { if (this._relay) this._relay.hide() },
+  onDestroy() {
+    if (this._relay) this._relay.destroy()
+    this._relay = null
+  },
+  startRecording() { if (this._relay) this._relay.command('start') },
+  stopRecording() { if (this._relay) this._relay.command('stop') },
+  refreshStatus() { if (this._relay) this._relay.refresh() }
+}
+</script>
+
+<style>
+.page { width: 466px; height: 466px; flex-direction: column; align-items: center; background-color: #090e18; padding-top: 36px; }
+.title { width: 330px; height: 40px; text-align: center; font-size: 28px; color: #ffffff; }
+.links { width: 342px; height: 43px; flex-direction: row; align-items: center; }
+.link { width: 171px; font-size: 17px; color: #9fb2cb; text-align: center; }
+.record { width: 350px; height: 43px; text-align: center; font-size: 30px; color: #ffffff; }
+.meta { width: 350px; height: 29px; text-align: center; font-size: 17px; color: #9fb2cb; }
+.button { width: 300px; height: 58px; border-radius: 29px; margin-top: 10px; color: #ffffff; font-size: 25px; }
+.start-on { background-color: #1569bc; }
+.stop-on { background-color: #bc2949; }
+.button-off { background-color: #243244; color: #8f9cad; }
+.note { width: 334px; height: 49px; margin-top: 10px; font-size: 17px; text-align: center; color: #bed2e8; lines: 2; }
+.refresh { width: 250px; height: 29px; text-align: center; font-size: 17px; color: #7dbbfa; }
+</style>
