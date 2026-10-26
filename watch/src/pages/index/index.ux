@@ -123,6 +123,7 @@ export default {
   },
   startCapturePress() {
     if (this.stopEnabled) {
+      this.playFeedback('long')
       this.cancelPressFeedback()
       this.pressProgress = 0
       this.pressRingVisible = true
@@ -135,7 +136,6 @@ export default {
         this.updatePressProgressIcon()
         this.clearPressProgressTimer()
         if (this.stopEnabled && this._relay) {
-          this.playFeedback('long')
           this._relay.command('stop')
         }
       }, 650)

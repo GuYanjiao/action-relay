@@ -62,6 +62,7 @@ assert.equal(page.captureIcon,'/common/ui/capture-stop.png');
 capture.opts.events.touchstart({});
 assert.equal(sent.filter(x=>x.type==='command'&&x.action==='stop').length,0);
 assert.equal(page.pressRingVisible,true);
+assert.deepEqual(vibrations,['short','long']);
 assert.match(page.pressProgressIcon,/press-0\.png$/);
 const stopTimerId=[...timers.keys()].at(-1);const stopTimer=timers.get(stopTimerId);assert.equal(typeof stopTimer,'function');timers.delete(stopTimerId);stopTimer();
 assert.equal(sent.filter(x=>x.type==='command'&&x.action==='stop').length,1);
