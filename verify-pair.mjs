@@ -20,7 +20,7 @@ assert.ok(apk.indexOf(certificate.raw)>=0,'Phone package must carry the same cer
 const watchZip=await JSZip.loadAsync(rpk,{checkCRC32:true});
 const manifest=JSON.parse(await watchZip.file('manifest.json').async('string'));
 assert.equal(manifest.package,'cn.local.actionrelay');
-assert.deepEqual(manifest.features.map(f=>f.name),['system.interconnect']);
+assert.deepEqual(manifest.features.map(f=>f.name),['system.interconnect','system.storage','system.vibrator']);
 assert.equal(manifest.versionName,versionName);
 assert.equal(manifest.versionCode,sourceManifest.versionCode);
 const phoneZip=await JSZip.loadAsync(apk,{checkCRC32:true});
