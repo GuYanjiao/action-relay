@@ -146,4 +146,31 @@ let checked = 0;
   assert.equal(last.session,'session-b'); assert.equal(last.ticket,'ticket-b');
   t.controller.destroy(); checked++;
 }
+{
+  const t=setup();t.controller.show();t.status();t.controller.command('start');
+  const command=t.sent.find(x=>x.type==='command');
+  const state={v:1,type:'status',seq:5,session:'session-a',ticket:'new-ticket',revision:9,camera:'ready',recording:true,
+    canControl:true,canStart:false,canStop:true,busy:false,recordPhase:'recording',recordSeconds:1};
+  t.receive({v:1,type:'result',id:command.id,session:'session-a',revision:9,ok:true,phase:'confirmed',state});
+  assert.equal(t.view().pending,false);assert.equal(t.view().recording,true);assert.equal(t.view().stopEnabled,true);
+  assert.equal(t.sent.filter(x=>x.type==='getStatus').length,0,'paired authoritative state saves a round trip');
+  t.status({seq:4,recording:false});assert.equal(t.view().recording,true,'older queued status cannot roll back result');
+  t.controller.destroy();checked++;
+}
+for(const invalid of [{session:'session-b'},{seq:1},{revision:8},{camera:'invalid'},{recording:'true'}]){
+  const t=setup();t.controller.show();t.status();t.controller.command('start');
+  const command=t.sent.find(x=>x.type==='command');
+  const state=Object.assign({v:1,type:'status',seq:5,session:'session-a',ticket:'ticket-new',revision:9,camera:'ready',
+    recording:true,canControl:true,canStart:false,canStop:true,busy:false},invalid);
+  t.receive({v:1,type:'result',id:command.id,session:'session-a',revision:9,ok:true,phase:'confirmed',state});
+  assert.equal(t.view().fresh,false);assert.equal(t.view().stopEnabled,false);
+  assert.equal(t.sent.at(-1).type,'getStatus','invalid bundled state uses safe fallback');
+  t.controller.destroy();checked++;
+}
+{
+  const t=setup();t.controller.show();t.status();t.status({session:'session-b',ticket:'ticket-b',recording:true});
+  t.status({session:'session-a',recording:false,seq:100});
+  assert.equal(t.view().recording,true,'retired session cannot restore an old camera state');
+  t.controller.destroy();checked++;
+}
 console.log(`PASS: ${checked} controller integration scenarios; no camera command retries.`);

@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.graphics.*;
 import android.graphics.drawable.*;
 import android.net.Uri;
@@ -18,8 +19,7 @@ import java.util.*;
 
 /** Native Android views, using the spacious cards and restrained color of HyperOS. */
 public final class MainActivity extends Activity implements RelayHub.UiListener {
-    private static final int BG=0xff101114,CARD=0xff1c1e23,SURFACE=0xff252830;
-    private static final int WHITE=0xfff2f4f7,MUTED=0xff9da6b5,BLUE=0xff86b7ff,GREEN=0xff6ad9a4,RED=0xffff555c,AMBER=0xffefb866;
+    private int BG,CARD,SURFACE,WHITE,MUTED,BLUE,GREEN,RED,AMBER;
     private RelayHub hub;
     private LinearLayout root,deviceRows;
     private TextView connectionTitle,timer,captureLabel,relayLabel,cameraHint,gpsDetail,logsView;
@@ -33,7 +33,11 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
 
     @Override public void onCreate(Bundle savedState){
         super.onCreate(savedState);hub=((RelayApp)getApplication()).hub;
+        boolean night=(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
+        if(night){BG=0xff101114;CARD=0xff1c1e23;SURFACE=0xff252830;WHITE=0xfff2f4f7;MUTED=0xff9da6b5;BLUE=0xff86b7ff;GREEN=0xff6ad9a4;RED=0xffff555c;AMBER=0xffefb866;}
+        else {BG=0xfff5f7fb;CARD=0xffffffff;SURFACE=0xffe9eef6;WHITE=0xff17202b;MUTED=0xff596574;BLUE=0xff2768c7;GREEN=0xff168a5b;RED=0xffc93642;AMBER=0xff9a6500;}
         getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+        getWindow().getDecorView().setSystemUiVisibility(night?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setBackgroundColor(BG);
         root=column();root.setPadding(dp(24),dp(18),dp(24),dp(26));scroll.addView(root);
         scroll.setOnApplyWindowInsetsListener((v,insets)->{Insets bars=insets.getInsets(WindowInsets.Type.systemBars());root.setPadding(dp(24),bars.top+dp(14),dp(24),bars.bottom+dp(24));return insets;});
@@ -73,7 +77,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         render();
     }
 
-    @Override protected void onResume(){super.onResume();resumed=true;hub.addListener(this);if(pendingGpsReconfigure)reconfigureGps();render();}
+    @Override protected void onResume(){super.onResume();resumed=true;hub.addListener(this);hub.onEnvironmentChanged();if(pendingGpsReconfigure)reconfigureGps();render();}
     @Override protected void onPause(){resumed=false;hub.removeListener(this);super.onPause();}
     @Override protected void onDestroy(){if(panel!=null)panel.dismiss();super.onDestroy();}
     @Override public void onChanged(){runOnUiThread(this::render);}
@@ -129,7 +133,14 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         addAction(content,"search","搜索相机",this::scanCamera);
         if(hub.rememberedCameraAddress!=null&&!hub.rememberedCameraAddress.isEmpty()){
             String name=hub.rememberedCameraName==null||hub.rememberedCameraName.isEmpty()?"上次的相机":hub.rememberedCameraName;
-            addAction(content,"reconnect","重连 · "+name,()->{if(!hub.enabled){toast("先开启手机中转");requestStart();return;}hub.reconnectRememberedCamera();});
+            addAction(content,"reconnect","重连 · "+name,()->{hub.requestReconnect();if(!hub.enabled){requestStart();}});
+            if(hub.rememberedCameraLastSuccess>0){
+                addText(content,"上次连接 · "+android.text.format.DateFormat.getDateFormat(this).format(new Date(hub.rememberedCameraLastSuccess))
+                    +" "+android.text.format.DateFormat.getTimeFormat(this).format(new Date(hub.rememberedCameraLastSuccess)),13,MUTED,false);
+            }
+            addAction(content,"close","忘记相机",()->new AlertDialog.Builder(this).setTitle("忘记这台相机？")
+                .setMessage("清除本应用的设备记忆并断开连接。下次需重新搜索和确认配对。")
+                .setPositiveButton("忘记",(d,w)->{hub.forgetCamera();showCameraPanel();}).setNegativeButton("取消",null).show());
         }
         deviceRows=column();content.addView(deviceRows);deviceKey="";
         gap(content,12);addText(content,"首次连接，请在相机确认并核对验证码。",13,MUTED,false);
@@ -158,7 +169,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         addAction(content,"log","连接记录",this::showLogsPanel);
         addAction(content,"refresh","重新配对相机",()->new AlertDialog.Builder(this).setTitle("重新配对相机？").setMessage("清除本应用保存的配对授权并断开连接。之后需重新搜索相机。").setPositiveButton("重新配对",(d,w)->hub.forgetCamera()).setNegativeButton("取消",null).show());
         addAction(content,"info","使用提示",()->new AlertDialog.Builder(this).setTitle("使用提示").setMessage("相机请设为普通视频模式。首次连接需在相机确认验证码。\n\n锁屏使用前，允许本应用和小米运动健康后台运行，并按系统提供的选项设置为不限制省电。\n\n自动重连不会自动录像。状态未确认时，主键会暂停使用。").setPositiveButton("知道了",null).show());
-        gap(content,8);addText(content,"Action 中转 · 0.3.1",12,MUTED,false);showSheet();render();
+        gap(content,8);addText(content,"Action 中转 · 0.3.3",12,MUTED,false);showSheet();render();
     }
     private void showLogsPanel(){LinearLayout content=sheet("连接记录");logsView=addText(content,"",12,MUTED,false);logsView.setTypeface(Typeface.MONOSPACE);logsView.setTextIsSelectable(true);showSheet();render();}
     private void openAppSettings(){startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}
@@ -195,7 +206,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         if(deviceRows!=null){
             String key=String.join("|",hub.candidates.keySet());if(!key.equals(deviceKey)){deviceKey=key;deviceRows.removeAllViews();for(RelayHub.Candidate candidate:hub.candidates.values()){
                 LinearLayout device=row();device.setGravity(Gravity.CENTER_VERTICAL);device.setPadding(dp(16),dp(12),dp(16),dp(12));device.setBackground(ripple(SURFACE,22));
-                IconView icon=new IconView("camera",BLUE);device.addView(icon,new LinearLayout.LayoutParams(dp(28),dp(28)));LinearLayout names=column();names.setPadding(dp(15),0,0,0);addText(names,candidate.name,16,WHITE,true);addText(names,candidate.address,12,MUTED,false);device.addView(names,new LinearLayout.LayoutParams(0,-2,1));device.setOnClickListener(v->hub.connect(candidate.address));deviceRows.addView(device,spaced(-1,dp(78),0,8));
+                IconView icon=new IconView("camera",BLUE);device.addView(icon,new LinearLayout.LayoutParams(dp(28),dp(28)));LinearLayout names=column();names.setPadding(dp(15),0,0,0);addText(names,candidate.name,16,WHITE,true);device.addView(names,new LinearLayout.LayoutParams(0,-2,1));device.setOnClickListener(v->hub.connect(candidate.address));deviceRows.addView(device,spaced(-1,dp(78),0,8));
             }}
         }
         bindingSwitches=true;if(gpsSwitch!=null)gpsSwitch.setChecked(hub.gpsEnabled);if(autoSwitch!=null)autoSwitch.setChecked(hub.autoReconnectEnabled);bindingSwitches=false;
@@ -213,7 +224,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
     private void gap(LinearLayout parent,int height){Space space=new Space(this);parent.addView(space,new LinearLayout.LayoutParams(1,dp(height)));}
     private LinearLayout.LayoutParams spaced(int width,int height,int top,int bottom){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(width,height);p.topMargin=dp(top);p.bottomMargin=dp(bottom);return p;}
     private GradientDrawable round(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
-    private Drawable ripple(int color,int radius){return new RippleDrawable(ColorStateList.valueOf(0x22ffffff),round(color,radius),round(Color.WHITE,radius));}
+    private Drawable ripple(int color,int radius){return new RippleDrawable(ColorStateList.valueOf((WHITE&0x00ffffff)|0x22000000),round(color,radius),round(Color.WHITE,radius));}
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private void toast(String text){Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
 

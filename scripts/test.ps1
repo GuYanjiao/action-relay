@@ -8,6 +8,8 @@ try{
   $classes=Join-Path $root 'test-classes';New-Item -ItemType Directory -Force -Path $classes|Out-Null
   $files=@(Get-ChildItem 'android/src/cn/local/actionrelay/protocol' -Filter '*.java' -File|ForEach-Object{$_.FullName})
   $files+=@((Get-Item 'android/src/cn/local/actionrelay/FrameQueue.java').FullName)
+  $files+=@((Get-Item 'android/src/cn/local/actionrelay/ReconnectPolicy.java').FullName)
+  $files+=@((Get-Item 'android/src/cn/local/actionrelay/WatchOutbox.java').FullName)
   $files+=@((Get-Item 'android/src/cn/local/actionrelay/GpsLifecycle.java').FullName)
   foreach($folder in @('tests/protocol','tests/transport','android/test','android/tests')){if(Test-Path $folder){$files+=@(Get-ChildItem $folder -Filter '*.java' -Recurse -File|ForEach-Object{$_.FullName})}}
   $argFile=Join-Path $classes 'sources.args';[IO.File]::WriteAllText($argFile,(($files|ForEach-Object{'"'+$_.Replace('\','/')+'"'})-join "`n"),[Text.UTF8Encoding]::new($false))
@@ -16,6 +18,8 @@ try{
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.DjiSessionTransitionTest')
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.GpsProtocolTest')
   Checked 'java' @('-cp',$classes,'FrameQueueTest')
+  Checked 'java' @('-cp',$classes,'ReconnectPolicyTest')
+  Checked 'java' @('-cp',$classes,'WatchOutboxTest')
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.GpsLifecycleTest')
  }
  if($Area -ne 'protocol'){

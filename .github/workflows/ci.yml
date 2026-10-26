@@ -37,13 +37,17 @@ jobs:
             android/src/cn/local/actionrelay/protocol/*.java \
             android/tests/cn/local/actionrelay/protocol/DjiSessionTransitionTest.java \
             tests/protocol/cn/local/actionrelay/protocol/DjiProtocolSelfTest.java \
-            tests/transport/FrameQueueTest.java \
+            tests/transport/*.java \
             android/src/cn/local/actionrelay/FrameQueue.java \
+            android/src/cn/local/actionrelay/ReconnectPolicy.java \
+            android/src/cn/local/actionrelay/WatchOutbox.java \
             android/src/cn/local/actionrelay/GpsLifecycle.java \
             android/tests/cn/local/actionrelay/GpsLifecycleTest.java \
             android/test/cn/local/actionrelay/protocol/GpsProtocolTest.java
           java -cp test-classes cn.local.actionrelay.protocol.DjiSessionTransitionTest
           java -cp test-classes cn.local.actionrelay.protocol.DjiProtocolSelfTest tests/connect_cmd_frame.txt
           java -cp test-classes FrameQueueTest
+          java -cp test-classes ReconnectPolicyTest
+          java -cp test-classes WatchOutboxTest
           java -cp test-classes cn.local.actionrelay.GpsLifecycleTest
           java -cp test-classes cn.local.actionrelay.protocol.GpsProtocolTest

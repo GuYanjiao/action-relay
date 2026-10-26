@@ -2,6 +2,13 @@ package cn.local.actionrelay;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.BroadcastReceiver;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.bluetooth.BluetoothAdapter;
+import android.Manifest;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -32,19 +39,35 @@ public final class RelayHub {
     public boolean enabled,busy,gpsEnabled,autoReconnectEnabled;
     public String phase="disconnected",message="先开启手机中转",watchMessage="等待手表连接",selectedAddress="";
     public String gpsState="off",gpsMessage="GPS推送未开启",rememberedCameraName="",rememberedCameraAddress="";
+    public long rememberedCameraLastSuccess;
     public float gpsAccuracy=-1,gpsSpeed=-1;
     public int verificationCode;
     private String epoch=UUID.randomUUID().toString(),ticket="";
     private long lastPublish;
     private String activeRequest="";
+    private final Map<String,Long> commandStarts=new HashMap<>();
+    private String lastPublishedControl="";
     private long statusSeq;
     private int gpsSequence;
+    private final ReconnectPolicy reconnectPolicy=new ReconnectPolicy();
+    private Runnable reconnectTask;
+    private boolean reconnectRequested,suppressReconnect,receiverRegistered;
+    private String retryAddress="";
     private final PhoneGps gps;
     private final GpsLifecycle gpsLifecycle;
     public RelayHub(Context ctx) {
         context=ctx.getApplicationContext(); prefs=context.getSharedPreferences("relay",0);
         rememberedCameraAddress=prefs.getString("camera_address","");
         rememberedCameraName=prefs.getString("camera_name","");
+        rememberedCameraLastSuccess=prefs.getLong("camera_last_success",0);
+        // Older builds also stored failed candidates. Only migrate a known paired camera.
+        if(!BluetoothAdapter.checkBluetoothAddress(rememberedCameraAddress)
+            ||!prefs.getBoolean("paired_"+rememberedCameraAddress,false)){
+            rememberedCameraAddress="";rememberedCameraName="";rememberedCameraLastSuccess=0;
+            prefs.edit().remove("camera_address").remove("camera_name").remove("camera_last_success").apply();
+        }
+        selectedAddress=rememberedCameraAddress;
+        retryAddress=rememberedCameraAddress;
         autoReconnectEnabled=prefs.getBoolean("auto_reconnect",false);
         gpsEnabled=prefs.getBoolean("gps_enabled",false);
         byte[] identity=new byte[6];
@@ -67,36 +90,51 @@ public final class RelayHub {
             public void onDisconnected(String reason){
                 phase="disconnected"; message=reason; busy=false; rotateEpoch();
                 if(session!=null) session.disconnect(); publish();changed();
-                if(enabled&&autoReconnectEnabled&&!rememberedCameraAddress.isEmpty()
+                if(!suppressReconnect&&enabled&&(autoReconnectEnabled||reconnectRequested)&&!retryAddress.isEmpty()
+                    &&prefs.getBoolean("paired_"+retryAddress,false)
                     &&reason!=null&&!reason.contains("拒绝")&&!reason.contains("授权")&&!reason.contains("重新建立")){
-                    main.postDelayed(()->{if(enabled&&autoReconnectEnabled)reconnectRememberedCamera();},3000);
+                    scheduleReconnect();
                 }
             }
-            public void onLog(String line){log(line);}
+            public void onLog(String line){if(line.startsWith("控制分段"))diagnostic(line);else log(line);}
         });
         session=new DjiSession(SystemClock::elapsedRealtime,ble::send,new DjiSession.Listener(){
             public void onReady(boolean ready){
-                if(ready) {phase="ready";message="相机已连接，等待状态";prefs.edit().putBoolean("paired_"+selectedAddress,true).putString("camera_address",selectedAddress).putString("camera_name",rememberedCameraName).apply();}
+                if(ready) {
+                    phase="ready";message="相机已连接，等待状态";reconnectRequested=false;cancelReconnect();reconnectPolicy.reset();
+                    Candidate candidate=candidates.get(selectedAddress);
+                    if(candidate!=null&&!candidate.name.isEmpty())rememberedCameraName=candidate.name;
+                    else if(!selectedAddress.equals(rememberedCameraAddress))rememberedCameraName="DJI Osmo Action 4";
+                    rememberedCameraAddress=selectedAddress;rememberedCameraLastSuccess=System.currentTimeMillis();
+                    retryAddress=selectedAddress;
+                    prefs.edit().putBoolean("paired_"+selectedAddress,true).putString("camera_address",selectedAddress)
+                        .putString("camera_name",rememberedCameraName).putLong("camera_last_success",rememberedCameraLastSuccess).apply();
+                }
                 changed();
             }
             public void onStatus(DjiProtocol.CameraStatus status){
                 if(!busy) message=!status.isNormalVideoMode()?"请将相机设为普通视频模式":!status.isControllableState()?"相机暂不可控，状态码 "+status.cameraState:status.isRecording()?"相机正在录像":status.isPreRecording()?"相机处于预录缓存":"相机已待机";
-                if(SystemClock.elapsedRealtime()-lastPublish>500) publish(); changed();
+                if(!controlKey().equals(lastPublishedControl)||SystemClock.elapsedRealtime()-lastPublish>500)publish();changed();
             }
             public void onLog(String line){log(line);}
             public void onCommandResult(String id,boolean desired,String outcome,String detail){
-                if(id.equals(activeRequest)){busy=false;activeRequest="";}
+                long finishedAt=SystemClock.elapsedRealtime();
+                if(id.equals(activeRequest)){busy=false;activeRequest="";ble.setControlPriority(false);}
                 message=detail;
+                newTicket();lastPublish=finishedAt;
                 JSONObject response=json("v",1,"type","result","id",id,"ok","confirmed".equals(outcome),"phase",outcome,"message",detail,
-                    "session",epoch,"revision",session.getRevision());
-                rememberResult(id,response); sendWatch(response); log(detail); publish();
+                    "session",epoch,"revision",session.getRevision(),"state",snapshot());
+                rememberResult(id,response); sendWatch(response);
+                Long started=commandStarts.remove(id);
+                if(started!=null)log("控制分段：手机受理至相机结果 "+Math.max(0,finishedAt-started)+" ms");
+                log(detail);
             }
             public void onDisconnectRequired(String reason){ble.disconnect(reason);}
         },controller,identity);
         bridge=new XiaomiWatchBridge(context,new XiaomiWatchBridge.Listener(){
-            public void onMessage(String text){main.post(()->handleWatch(text));}
+            public void onMessage(String text){handleWatch(text);}
             public void onState(String text){main.post(()->{watchMessage=text;changed();});}
-            public void onLog(String text){main.post(()->log(text));}
+            public void onLog(String text){main.post(()->{if(text.startsWith("控制分段"))diagnostic(text);else log(text);});}
         });
         gps=new PhoneGps(context,new PhoneGps.Listener(){
             public void onStateChanged(PhoneGps.State state){
@@ -123,24 +161,46 @@ public final class RelayHub {
     public void start(){
         if(enabled)return; enabled=true;rotateEpoch();message="手机中转已开启，请搜索相机";
         bridge.start(); gpsLifecycle.reconfigure(true,gpsEnabled); main.post(pulse);
-        if(autoReconnectEnabled&&!rememberedCameraAddress.isEmpty())
-            main.postDelayed(()->{if(enabled&&autoReconnectEnabled)reconnectRememberedCamera();},500);
+        if(!receiverRegistered){
+            IntentFilter filter=new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+            if(Build.VERSION.SDK_INT>=33)context.registerReceiver(bluetoothReceiver,filter,Context.RECEIVER_EXPORTED);
+            else context.registerReceiver(bluetoothReceiver,filter);
+            receiverRegistered=true;
+        }
+        reconnectPolicy.reset();retryAddress=rememberedCameraAddress;
+        if((autoReconnectEnabled||reconnectRequested)&&!rememberedCameraAddress.isEmpty())scheduleReconnect();
         changed();
     }
     public void stop(){
-        enabled=false;main.removeCallbacks(pulse);gpsLifecycle.stop();ble.close();busy=false;message="手机中转已关闭";
+        enabled=false;main.removeCallbacks(pulse);cancelReconnect();reconnectRequested=false;
+        if(receiverRegistered){context.unregisterReceiver(bluetoothReceiver);receiverRegistered=false;}
+        gpsLifecycle.stop();ble.close();busy=false;message="手机中转已关闭";
         publish();bridge.stop();changed();
     }
-    public void scan(){if(!enabled){log("请先开启手机中转");return;}candidates.clear();ble.scan();changed();}
+    public void scan(){if(!enabled){log("请先开启手机中转");return;}cancelReconnect();reconnectRequested=false;candidates.clear();ble.scan();changed();}
     public void connect(String address){
-        if(!enabled)return; selectedAddress=address;rememberedCameraAddress=address;
-        Candidate candidate=candidates.get(address);if(candidate!=null)rememberedCameraName=candidate.name;
-        prefs.edit().putString("camera_address",address).putString("camera_name",rememberedCameraName).apply();
-        verificationCode=random.nextInt(10000);rotateEpoch();
-        ble.connect(address);changed();
+        if(!enabled||!BluetoothAdapter.checkBluetoothAddress(address))return;
+        cancelReconnect();reconnectPolicy.reset();reconnectRequested=false;retryAddress=address;beginConnect(address);
     }
-    public void reconnectRememberedCamera(){if(enabled&&!rememberedCameraAddress.isEmpty())ble.connect(rememberedCameraAddress);}
-    public void setAutoReconnect(boolean enabled){autoReconnectEnabled=enabled;prefs.edit().putBoolean("auto_reconnect",enabled).apply();changed();}
+    private void beginConnect(String address){
+        if(!enabled||!connectionAvailable())return;
+        if(address.equals(selectedAddress)&&("connecting".equals(phase)||"authorizing".equals(phase)||session.isReady()))return;
+        suppressReconnect=true;
+        try{ble.disconnect("正在切换连接");selectedAddress=address;verificationCode=random.nextInt(10000);ble.connect(address);}
+        finally{suppressReconnect=false;}
+        changed();
+    }
+    public void requestReconnect(){
+        if(rememberedCameraAddress.isEmpty())return;
+        if(enabled&&rememberedCameraAddress.equals(selectedAddress)&&session.isReady())return;
+        cancelReconnect();reconnectPolicy.reset();retryAddress=rememberedCameraAddress;reconnectRequested=true;
+        if(enabled)scheduleReconnect();changed();
+    }
+    public void reconnectRememberedCamera(){requestReconnect();}
+    public void setAutoReconnect(boolean value){
+        autoReconnectEnabled=value;prefs.edit().putBoolean("auto_reconnect",value).apply();
+        if(!value){cancelReconnect();reconnectRequested=false;}else{reconnectPolicy.reset();onEnvironmentChanged();}changed();
+    }
     public void reconfigureGps(){
         gpsLifecycle.reconfigure(enabled,gpsEnabled);
         if(!gpsEnabled){gpsState="off";gpsMessage="GPS推送未开启";gpsAccuracy=-1;gpsSpeed=-1;ble.clearGps();}
@@ -150,10 +210,54 @@ public final class RelayHub {
     public void setGpsStartError(String detail){gpsLifecycle.stop();ble.clearGps();gpsState="unavailable";gpsMessage=detail;gpsAccuracy=-1;gpsSpeed=-1;changed();}
     private int nextGpsSequence(){gpsSequence=(gpsSequence+1)&0xffff;if(gpsSequence==0)gpsSequence=1;return gpsSequence;}
     public void forgetCamera(){
-        if(!selectedAddress.isEmpty())prefs.edit().remove("paired_"+selectedAddress).apply();
+        cancelReconnect();reconnectRequested=false;retryAddress="";
+        String oldAddress=rememberedCameraAddress;
+        prefs.edit().remove("paired_"+oldAddress).remove("paired_"+selectedAddress)
+            .remove("camera_address").remove("camera_name").remove("camera_last_success").apply();
+        selectedAddress="";rememberedCameraAddress="";rememberedCameraName="";rememberedCameraLastSuccess=0;
         ble.disconnect("已清除本应用保存的相机授权标记，请重新搜索连接");
     }
-    private void rotateEpoch(){epoch=UUID.randomUUID().toString();tickets.clear();ticket="";}
+    private void scheduleReconnect(){
+        if(reconnectTask!=null||!enabled||retryAddress.isEmpty()||(!autoReconnectEnabled&&!reconnectRequested)
+            ||session.isReady()||"connecting".equals(phase)||"authorizing".equals(phase)||!connectionAvailable())return;
+        final ReconnectPolicy.Ticket ticket=reconnectPolicy.schedule();
+        if(ticket==null){if(reconnectPolicy.exhausted())log("重连已暂停，请检查相机后点击重连");return;}
+        final String address=retryAddress;
+        reconnectTask=()->{
+            reconnectTask=null;
+            if(!reconnectPolicy.claim(ticket)||!enabled||!address.equals(retryAddress)||(!autoReconnectEnabled&&!reconnectRequested))return;
+            if(connectionAvailable())beginConnect(address);
+        };
+        main.postDelayed(reconnectTask,ticket.delayMs);
+    }
+    private final BroadcastReceiver bluetoothReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
+        if(!enabled||!BluetoothAdapter.ACTION_STATE_CHANGED.equals(i.getAction()))return;
+        int state=i.getIntExtra(BluetoothAdapter.EXTRA_STATE,-1);
+        if(state==BluetoothAdapter.STATE_OFF||state==BluetoothAdapter.STATE_TURNING_OFF)ble.disconnect("手机蓝牙已关闭，开启后可继续重连");
+        else if(state==BluetoothAdapter.STATE_ON)onEnvironmentChanged();
+    }};
+    public void onEnvironmentChanged(){
+        if(enabled&&(autoReconnectEnabled||reconnectRequested)&&!rememberedCameraAddress.isEmpty()
+            &&(retryAddress.isEmpty()||retryAddress.equals(rememberedCameraAddress))
+            &&!session.isReady()&&!"connecting".equals(phase)&&!"authorizing".equals(phase)&&connectionAvailable()){
+            cancelReconnect();reconnectPolicy.reset();retryAddress=rememberedCameraAddress;scheduleReconnect();
+        }
+    }
+    private boolean connectionAvailable(){
+        if(context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED
+            ||context.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)!=PackageManager.PERMISSION_GRANTED){
+            message="需要附近设备权限，授权后可继续重连";changed();return false;
+        }
+        if(!ble.bluetoothEnabled()){message="请打开手机蓝牙，开启后继续重连";changed();return false;}
+        return true;
+    }
+    private void cancelReconnect(){
+        if(reconnectTask!=null)main.removeCallbacks(reconnectTask);reconnectTask=null;reconnectPolicy.cancel();
+    }
+    private void rotateEpoch(){
+        epoch=UUID.randomUUID().toString();tickets.clear();ticket="";results.clear();
+        if(bridge!=null)bridge.clearPending();
+    }
     private void newTicket(){
         long now=SystemClock.elapsedRealtime();ticket=UUID.randomUUID().toString();tickets.put(ticket,now);
         Iterator<Map.Entry<String,Long>> it=tickets.entrySet().iterator();
@@ -175,15 +279,23 @@ public final class RelayHub {
             "battery",fresh?s.batteryPercent:-1,"recordSeconds",fresh?s.recordingSeconds:-1,"gpsMessage",gpsMessage,"message",detail,
             "revision",session.getRevision());
     }
-    private void publish(){if(session==null||bridge==null)return;newTicket();lastPublish=SystemClock.elapsedRealtime();sendWatch(snapshot());}
+    private String controlKey(){
+        DjiProtocol.CameraStatus status=session.getStatus();
+        return phase+":"+session.getCommandPhase()+":"+session.canStartRecording()+":"+session.canStopRecording()
+            +":"+(status==null?-1:status.cameraState);
+    }
+    private void publish(){if(session==null||bridge==null)return;newTicket();lastPublish=SystemClock.elapsedRealtime();lastPublishedControl=controlKey();sendWatch(snapshot());}
     private void sendWatch(JSONObject object){if(enabled&&bridge!=null)bridge.send(object.toString());}
     public void phoneCommand(boolean start){command(start,"phone-"+UUID.randomUUID());}
     private void command(boolean desired,String id){
         if(!enabled || (desired?!session.canStartRecording():!session.canStopRecording())){reject(id,"相机未就绪，或当前状态不允许此操作");return;}
-        busy=true;activeRequest=id;message=desired?"正在请求开始录像":"正在请求停止录像";
+        busy=true;activeRequest=id;commandStarts.put(id,SystemClock.elapsedRealtime());message=desired?"正在请求开始录像":"正在请求停止录像";
+        ble.setControlPriority(true);
+        // Dispatch camera control before generating receipts or waking UI observers.
+        session.setRecording(desired,id);
+        if(!id.equals(activeRequest)){changed();return;}
         JSONObject accepted=json("v",1,"type","result","id",id,"ok",false,"phase","accepted","message",message,"session",epoch,"revision",session.getRevision());
-        rememberResult(id,accepted);sendWatch(accepted);publish();
-        session.setRecording(desired,id);changed();
+        rememberResult(id,accepted);sendWatch(accepted);changed();
     }
     private void handleWatch(String text){
         if(text==null||text.length()>4096)return;
@@ -211,11 +323,17 @@ public final class RelayHub {
         results.put(id,result);while(results.size()>128)results.remove(results.keySet().iterator().next());
     }
     public void log(String line){
-        if(line==null)return;message=line;
+        if(line==null)return;message=line;diagnostic(line);
+    }
+    private void diagnostic(String line){
         logs.add(0,line.length()>200?line.substring(0,200):line);while(logs.size()>60)logs.remove(logs.size()-1);changed();
     }
     public void addListener(UiListener listener){if(!observers.contains(listener))observers.add(listener);}
     public void removeListener(UiListener listener){observers.remove(listener);}
-    private void changed(){for(UiListener observer:new ArrayList<>(observers))observer.onChanged();}
+    private boolean uiQueued;
+    private void changed(){
+        if(uiQueued)return;uiQueued=true;
+        main.post(()->{uiQueued=false;for(UiListener observer:new ArrayList<>(observers))observer.onChanged();});
+    }
     private static JSONObject json(Object... values){JSONObject result=new JSONObject();try{for(int i=0;i<values.length;i+=2)result.put((String)values[i],values[i+1]);}catch(Exception ignored){}return result;}
 }

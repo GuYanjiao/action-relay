@@ -1,8 +1,8 @@
 {
   "package": "cn.local.actionrelay",
   "name": "Action遥控",
-  "versionName": "0.3.2",
-  "versionCode": 5,
+  "versionName": "0.3.3",
+  "versionCode": 6,
   "minAPILevel": 1,
   "minPlatformVersion": 1200,
   "icon": "/common/logo.png",

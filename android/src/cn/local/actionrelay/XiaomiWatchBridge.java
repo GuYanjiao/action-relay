@@ -17,7 +17,6 @@ import com.xiaomi.xms.wearable.node.NodeApi;
 import com.xiaomi.xms.wearable.service.ServiceApi;
 import com.xiaomi.xms.wearable.service.OnServiceConnectionListener;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayDeque;
 import java.util.List;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -40,8 +39,7 @@ public final class XiaomiWatchBridge {
     private String nodeId="",registeredNode="",lastState="",lastError="";
     private long lastErrorAt;
     private long lastMessageAt;
-    private final ArrayDeque<String> outbound=new ArrayDeque<>();
-    private boolean sending;
+    private final WatchOutbox outbound=new WatchOutbox();
     private Runnable sendTimeout;
     private int generation;
 
@@ -65,7 +63,7 @@ public final class XiaomiWatchBridge {
     }
     public void stop(){
         running=false;generation++;main.removeCallbacks(poll);querying=false;checking=false;registering=false;authorizing=false;
-        outbound.clear();sending=false;if(sendTimeout!=null)main.removeCallbacks(sendTimeout);sendTimeout=null;
+        clearSends();
         detach();nodeId="";
         if(service!=null)try{service.unregisterServiceConnectionListener(serviceListener);}catch(Exception ignored){}
         state("中转已关闭");
@@ -76,7 +74,7 @@ public final class XiaomiWatchBridge {
     private final OnServiceConnectionListener serviceListener=new OnServiceConnectionListener(){
         public void onServiceConnected(){main.post(()->{if(running){state("小米运动健康服务已连接");refresh();}});}
         public void onServiceDisconnected(){main.post(()->{
-            if(!running)return;registeredNode="";nodeId="";checking=false;registering=false;querying=false;
+            if(!running)return;generation++;clearSends();registeredNode="";nodeId="";checking=false;registering=false;querying=false;
             state("小米运动健康服务已断开");
         });}
     };
@@ -167,31 +165,40 @@ public final class XiaomiWatchBridge {
     }
     public void send(String json){
         if(!running||messages==null||nodeId.isEmpty()||registeredNode.isEmpty()||json==null||json.length()>4096)return;
-        boolean terminal=json.contains("\"type\":\"result\"");
-        if(terminal)outbound.addFirst(json);else{
-            outbound.removeIf(item->item.contains("\"type\":\"status\""));
-            outbound.addLast(json);
-        }
+        try{
+            JSONObject packet=new JSONObject(json);
+            boolean result="result".equals(packet.optString("type"));
+            boolean terminal=result&&!"accepted".equals(packet.optString("phase"));
+            outbound.offer(json,packet.optString("id"),result,terminal,SystemClock.elapsedRealtime());
+        }catch(Exception error){report("手表消息未入队",error);return;}
         pumpSend();
     }
     private void pumpSend(){
-        if(sending||outbound.isEmpty()||!running||messages==null||nodeId.isEmpty())return;
-        final String id=nodeId;final int run=generation;final String json=outbound.removeFirst();sending=true;
+        if(!running||messages==null||nodeId.isEmpty()||registeredNode.isEmpty())return;
+        final WatchOutbox.Item item=outbound.begin();if(item==null)return;
+        final String id=nodeId;final int run=generation;
         try{
-            messages.sendMessage(id,json.getBytes(StandardCharsets.UTF_8))
-                .addOnSuccessListener(ignored->main.post(()->finishSend(id,run,null)))
-                .addOnFailureListener(error->main.post(()->finishSend(id,run,error)));
-            sendTimeout=()->{if(sending)finishSend(id,run,new RuntimeException("发送超时"));};
+            messages.sendMessage(id,item.json.getBytes(StandardCharsets.UTF_8))
+                .addOnSuccessListener(ignored->main.post(()->finishSend(id,run,item,null)))
+                .addOnFailureListener(error->main.post(()->finishSend(id,run,item,error)));
+            sendTimeout=()->{if(run==generation&&outbound.isInflight(item)){
+                // SDK operations cannot be canceled. Invalidate the lane instead of overlapping sends.
+                detach();state("手表发送超时，正在恢复消息通道");refresh();
+            }};
             main.postDelayed(sendTimeout,5000);
-        }catch(Exception error){finishSend(id,run,error);}
+        }catch(Exception error){finishSend(id,run,item,error);}
     }
-    private void finishSend(String id,int run,Exception error){
-        if(run!=generation||!id.equals(nodeId)){sending=false;return;}
-        if(sendTimeout!=null)main.removeCallbacks(sendTimeout);sendTimeout=null;sending=false;
+    private void finishSend(String id,int run,WatchOutbox.Item item,Exception error){
+        if(run!=generation||!id.equals(nodeId)||!outbound.finish(item))return;
+        if(sendTimeout!=null)main.removeCallbacks(sendTimeout);sendTimeout=null;
+        if(item.result&&item.terminal)listener.onLog("控制分段：结果队列至SDK回调 "+Math.max(0,SystemClock.elapsedRealtime()-item.queuedAt)+" ms");
         if(error!=null)report("发送手表消息失败",error);
         pumpSend();
     }
+    public void clearPending(){clearSends();}
+    private void clearSends(){outbound.clear();if(sendTimeout!=null)main.removeCallbacks(sendTimeout);sendTimeout=null;}
     private void detach(){
+        clearSends();
         String old=registeredNode;registeredNode="";
         if(messages!=null&&!old.isEmpty())try{messages.removeListener(old);}catch(Exception ignored){}
     }

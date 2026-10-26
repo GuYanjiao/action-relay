@@ -179,6 +179,10 @@ public final class DjiBle {
     }
     public boolean supportsGps(){return ready&&mtu>=69;}
     public void clearGps(){queue.clearGps();}
+    public void setControlPriority(boolean active){
+        if(gatt!=null)try{gatt.requestConnectionPriority(active?BluetoothGatt.CONNECTION_PRIORITY_HIGH:BluetoothGatt.CONNECTION_PRIORITY_BALANCED);}
+        catch(RuntimeException error){listener.onLog("蓝牙连接参数未调整，继续使用当前参数");}
+    }
     private void pump() {
         if(writing || !ready) return;
         FrameQueue.Packet packet=queue.poll(SystemClock.elapsedRealtime());
@@ -186,6 +190,8 @@ public final class DjiBle {
         if(SystemClock.elapsedRealtime()>=packet.deadline){disconnect("指令在发送前已过期，未继续发送");return;}
         byte[] bytes=packet.bytes; writing=true; boolean sent;
         try {
+            if(!packet.telemetry&&bytes.length>=19&&(bytes[12]&255)==0x1d&&(bytes[13]&255)==3)
+                listener.onLog("控制分段：GATT排队 "+Math.max(0,SystemClock.elapsedRealtime()-packet.queuedAt)+" ms");
             if(Build.VERSION.SDK_INT>=33) sent=gatt.writeCharacteristic(write,bytes,BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)==0;
             else { write.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT); write.setValue(bytes); sent=gatt.writeCharacteristic(write); }
             if(!sent) { disconnect("相机写入请求未被接受"); return; }

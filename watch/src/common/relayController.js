@@ -16,6 +16,7 @@ export function createRelayController(options) {
   var prefix = now().toString(36) + '-' + Math.floor(Math.random() * 1000000).toString(36);
   var lastSeq = -1;
   var lastSession = null;
+  var retiredSessions = [];
   var cameraNames = { disconnected: '未连接', connecting: '连接中', authorizing: '等待授权', ready: '已就绪' };
 
   function shorten(value) {
@@ -109,12 +110,17 @@ export function createRelayController(options) {
     var packet = parseIncoming(event);
     if (!packet) return;
     if (packet.type === 'status') {
+      if (retiredSessions.indexOf(packet.session) >= 0) return;
       if (!Object.prototype.hasOwnProperty.call(cameraNames, packet.camera)) return;
       if (packet.recording !== null && typeof packet.recording !== 'boolean') return;
       if (typeof packet.canControl !== 'boolean' || typeof packet.busy !== 'boolean') return;
       if (typeof packet.seq === 'number' && lastSession === packet.session && packet.seq <= lastSeq) return;
       if (typeof packet.seq === 'number') lastSeq = packet.seq;
       if (lastSession && lastSession !== packet.session) {
+        if (hasTokens(packet)) {
+          retiredSessions.push(lastSession);
+          if (retiredSessions.length > 8) retiredSessions.shift();
+        }
         pending = null;
         lastSeq = typeof packet.seq === 'number' ? packet.seq : -1;
         message = '手机连接已更新，请重新操作';
@@ -138,12 +144,23 @@ export function createRelayController(options) {
       if (packet.phase === 'accepted') {
         message = packet.message || '指令已受理，等待相机确认';
       } else if (packet.phase === 'confirmed' && packet.ok === true) {
+        var expectedSession = pending.session;
         pending = null;
         // A confirmation packet must not re-enable buttons from a pre-command snapshot.
         lastStatus = null;
         lastReceived = null;
         message = packet.message || '相机已确认';
-        requestStatus();
+        // Same-session authoritative state avoids an extra watch -> phone round trip.
+        // Older phone builds and malformed/stale bundled states keep the safe query fallback.
+        if (packet.state && packet.state.type === 'status' && packet.state.v === 1 &&
+            packet.state.session === expectedSession && hasTokens(packet.state) &&
+            typeof packet.state.seq === 'number' && packet.state.seq > lastSeq &&
+            packet.state.revision === packet.revision &&
+            Object.prototype.hasOwnProperty.call(cameraNames, packet.state.camera) &&
+            (packet.state.recording === null || typeof packet.state.recording === 'boolean') &&
+            typeof packet.state.canControl === 'boolean' && typeof packet.state.busy === 'boolean') {
+          onmessage(packet.state);
+        } else requestStatus();
       } else if (packet.phase === 'failed' || packet.phase === 'unknown' || packet.phase === 'rejected') {
         pending = null;
         lastStatus = null;

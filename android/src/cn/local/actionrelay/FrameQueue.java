@@ -7,9 +7,9 @@ import java.util.Iterator;
 public final class FrameQueue {
     public static final class Packet {
         public final byte[] bytes;
-        public final long deadline;
+        public final long deadline,queuedAt;
         public final boolean telemetry;
-        private Packet(byte[] bytes,long deadline,boolean telemetry){this.bytes=bytes.clone();this.deadline=deadline;this.telemetry=telemetry;}
+        private Packet(byte[] bytes,long deadline,boolean telemetry){this.bytes=bytes.clone();this.deadline=deadline;this.telemetry=telemetry;this.queuedAt=deadline-(telemetry?1500:4000);}
     }
     private final ArrayDeque<Packet> controls=new ArrayDeque<>();
     private Packet latestGps;

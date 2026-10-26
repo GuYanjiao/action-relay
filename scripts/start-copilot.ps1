@@ -21,7 +21,7 @@ if($Probe){
     if(-not(Test-Path -LiteralPath $task -PathType Leaf)){throw 'TaskFile must be an existing file.'}
     if([IO.Path]::GetExtension($task) -ne '.md'){throw 'Use a Markdown task file.'}
 }
-$prompt="Execute the attached task file in this workspace using GitHub Copilot. Read AGENTS.md first. This run ID is $runId. Write your final status (STATUS: completed or STATUS: blocked), changes, exact checks and remaining issues to $resultFile. Follow the scope and Git instructions in the task file. Do not start another worker for the same files."
+$prompt="Execute this exact task file: $task . Read it directly with your file-reading tool; there is no task.md in the run directory. Read AGENTS.md first. Use file-reading/search/edit tools only: do not invoke terminal or shell tools, do not build or run tests locally. Codex handles static verification, Git and cloud checks after you finish. This run ID is $runId. Write your final status (STATUS: completed or STATUS: blocked), changes and remaining issues with the file-edit tool to $resultFile . Follow the task scope. Do not start another worker for the same files."
 $launch=[ordered]@{runId=$runId;workspace=$root;taskFile=$task;resultFile=$resultFile;state='prepared';cli=$code;createdAt=[DateTimeOffset]::Now.ToString('o')}
 if($DryRun){$launch|ConvertTo-Json;return}
 New-Item -ItemType Directory -Path $runRoot -Force|Out-Null
