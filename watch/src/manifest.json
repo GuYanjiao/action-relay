@@ -7,7 +7,11 @@
   "minPlatformVersion": 1200,
   "icon": "/common/logo.png",
   "deviceTypeList": ["watch"],
-  "features": [{"name": "system.interconnect"}],
+  "features": [
+    {"name": "system.interconnect"},
+    {"name": "system.storage"},
+    {"name": "system.vibrator"}
+  ],
   "config": {"logLevel": "error", "designWidth": 466},
   "router": {"entry": "pages/index", "pages": {"pages/index": {"component": "index"}}},
   "display": {"backgroundColor": "#000000"}
