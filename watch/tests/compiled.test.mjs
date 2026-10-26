@@ -49,7 +49,7 @@ assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,true);
 assert.equal(page.captureIcon,'/common/ui/capture-stop.png');
 capture.opts.events.touchstart({});
 assert.equal(sent.filter(x=>x.type==='command'&&x.action==='stop').length,0);
-const stopTimer=[...timers.values()].at(-1);assert.equal(typeof stopTimer,'function');stopTimer();
+const stopTimerId=[...timers.keys()].at(-1);const stopTimer=timers.get(stopTimerId);assert.equal(typeof stopTimer,'function');timers.delete(stopTimerId);stopTimer();
 assert.equal(sent.filter(x=>x.type==='command'&&x.action==='stop').length,1);
 page.applyState({phoneConnected:true,cameraReady:true,gpsEnabled:true,gpsState:'provider_off',recordPhase:'idle',canStart:true,canStop:false});
 assert.equal(page.gpsIcon,'/common/ui/gps-error.png');
