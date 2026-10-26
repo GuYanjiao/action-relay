@@ -64,10 +64,13 @@ export function createHoldProgress(options) {
     var run = generation;
     var from = progress;
     var startedAt = now();
+    var returnTicks = 0;
     function fall() {
       if (run !== generation || stage !== 'returning') return;
       frame = null;
-      var fraction = Math.max(0, Math.min(1, (now() - startedAt) / returnMs));
+      // Timer ticks also bound the animation if the system clock moves backwards.
+      var fraction = Math.max(0, Math.min(1, Math.max(now() - startedAt, returnTicks * frameMs) / returnMs));
+      returnTicks += 1;
       progress = Math.min(progress, from * (1 - fraction) * (1 - fraction));
       if (fraction >= 1 || progress <= 0) { cancel(); return; }
       emit(true);

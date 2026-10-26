@@ -59,4 +59,9 @@ for(const result of [false,'throw']){
   assert.ok(t.view().progress<100);assert.equal(t.stops(),0,'clock jump cannot trigger an early stop');t.advance(334);
   assert.equal(t.stops(),1);t.hold.release();checked++;
 }
+{
+  const t=setup();t.hold.start();t.advance(160);t.hold.release();t.offset(-3600000);t.advance(200);
+  assert.equal(t.view().visible,false,'clock rollback cannot leave the return animation running forever');
+  assert.equal(t.timers.size,0);assert.equal(t.stops(),0);checked++;
+}
 console.log(`PASS: ${checked} hold gesture scenarios (smooth progress, abort, committed release, lifecycle, failures, clock changes)`);
