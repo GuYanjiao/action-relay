@@ -19,6 +19,7 @@ import cn.local.actionrelay.protocol.*;
 
 /** Owns local command routing; no network server or cloud account. */
 public final class RelayHub {
+    private static final int MAX_SCAN_CANDIDATES = 24;
     public interface UiListener { void onChanged(); }
     public static final class Candidate {
         public final String address,name; public final int rssi;
@@ -80,7 +81,12 @@ public final class RelayHub {
         long controller=prefs.getLong("controller",-1);
         if(controller<0) {controller=random.nextInt()&0xffffffffL;prefs.edit().putLong("controller",controller).apply();}
         ble=new DjiBle(context,new DjiBle.Listener(){
-            public void onCandidate(String a,String n,int r){candidates.put(a,new Candidate(a,n,r));changed();}
+            public void onCandidate(String a,String n,int r){
+                if(a==null||a.isEmpty())return;
+                if(!candidates.containsKey(a)&&candidates.size()>=MAX_SCAN_CANDIDATES)
+                    candidates.remove(candidates.keySet().iterator().next());
+                candidates.put(a,new Candidate(a,n==null?"":n,r));changed();
+            }
             public void onPhase(String p,String m){phase=p;message=m;publish();changed();}
             public void onTransportReady(){
                 phase="authorizing"; message=String.format(Locale.ROOT,"请在相机上允许连接 · 验证码 %04d",verificationCode);

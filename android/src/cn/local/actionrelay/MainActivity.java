@@ -22,9 +22,8 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
     private int BG,CARD,SURFACE,WHITE,MUTED,BLUE,GREEN,RED,AMBER;
     private RelayHub hub;
     private LinearLayout root,deviceRows;
-    private TextView connectionTitle,timer,captureLabel,relayLabel,cameraHint,gpsDetail,logsView;
+    private TextView connectionTitle,recordingStatus,relayLabel,cameraHint,gpsDetail,logsView;
     private StatusItem watchStatus,cameraStatus,batteryStatus,gpsStatus;
-    private CaptureView capture;
     private IconView relayPower;
     private Dialog panel;
     private Switch gpsSwitch,autoSwitch;
@@ -58,16 +57,13 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         relayLabel=label("中转关闭",12,MUTED,false);cardHeader.addView(relayLabel);statusCard.addView(cardHeader);
         gap(statusCard,8);connectionTitle=addText(statusCard,"等待连接",21,WHITE,true);gap(statusCard,15);
         LinearLayout indicators=row();
-        watchStatus=new StatusItem("watch");cameraStatus=new StatusItem("camera");batteryStatus=new StatusItem("battery");gpsStatus=new StatusItem("gps");
-        for(StatusItem item:new StatusItem[]{watchStatus,cameraStatus,batteryStatus,gpsStatus})indicators.addView(item,new LinearLayout.LayoutParams(0,dp(68),1));
+        watchStatus=new StatusItem("watch");cameraStatus=new StatusItem("camera");gpsStatus=new StatusItem("gps");batteryStatus=new StatusItem("battery");
+        for(StatusItem item:new StatusItem[]{watchStatus,cameraStatus,gpsStatus,batteryStatus})indicators.addView(item,new LinearLayout.LayoutParams(0,dp(68),1));
         watchStatus.setContentDescription("手表连接状态");cameraStatus.setContentDescription("相机连接状态");batteryStatus.setContentDescription("相机电量");gpsStatus.setContentDescription("手机GPS状态");
         watchStatus.setOnClickListener(v->authorizeWatch());cameraStatus.setOnClickListener(v->showCameraPanel());gpsStatus.setOnClickListener(v->showGpsPanel());
         statusCard.addView(indicators);root.addView(statusCard);
 
-        gap(root,26);timer=label("--:--",57,WHITE,false);timer.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL));timer.setGravity(Gravity.CENTER);root.addView(timer,new LinearLayout.LayoutParams(-1,dp(75)));
-        LinearLayout captureHolder=row();captureHolder.setGravity(Gravity.CENTER);capture=new CaptureView();capture.setOnClickListener(v->tapCapture());
-        captureHolder.addView(capture,new LinearLayout.LayoutParams(dp(168),dp(168)));root.addView(captureHolder);
-        gap(root,12);captureLabel=label("等待连接",17,MUTED,false);captureLabel.setGravity(Gravity.CENTER);root.addView(captureLabel,new LinearLayout.LayoutParams(-1,dp(32)));
+        gap(root,14);recordingStatus=label("录像状态：等待连接",15,MUTED,false);recordingStatus.setGravity(Gravity.CENTER);root.addView(recordingStatus,new LinearLayout.LayoutParams(-1,dp(34)));
         gap(root,24);
         LinearLayout toolbar=row();toolbar.setGravity(Gravity.CENTER);
         toolbar.addView(toolButton("camera","相机",this::showCameraPanel),weightedTool());
@@ -82,7 +78,6 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
     @Override protected void onDestroy(){if(panel!=null)panel.dismiss();super.onDestroy();}
     @Override public void onChanged(){runOnUiThread(this::render);}
 
-    private void tapCapture(){JSONObject s=hub.snapshot();if(s.optBoolean("canStop"))hub.phoneCommand(false);else if(s.optBoolean("canStart"))hub.phoneCommand(true);}
     private void requestStart(){
         ArrayList<String> needed=new ArrayList<>();
         for(String p:new String[]{Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT})if(checkSelfPermission(p)!=PackageManager.PERMISSION_GRANTED)needed.add(p);
@@ -187,21 +182,20 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
     private void showSheet(){panel.show();Window w=panel.getWindow();if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);WindowManager.LayoutParams p=w.getAttributes();p.dimAmount=.55f;p.gravity=Gravity.BOTTOM;p.width=-1;p.height=-2;w.setAttributes(p);w.setNavigationBarColor(CARD);}}
 
     private void render(){
-        if(capture==null)return;JSONObject s=hub.snapshot();
+        JSONObject s=hub.snapshot();
         boolean ready="ready".equals(hub.phase);boolean watchConnected=s.optBoolean("watchConnected",false);
         Object truth=s.opt("recording");boolean known=truth instanceof Boolean;boolean rec=known&&(Boolean)truth;
-        String phase=s.optString("recordPhase","unknown");boolean canStart=s.optBoolean("canStart"),canStop=s.optBoolean("canStop");
+        String phase=s.optString("recordPhase","unknown");boolean canStart=s.optBoolean("canStart");
         String connection=ready?"已连接":"authorizing".equals(hub.phase)?"请在相机确认":"connecting".equals(hub.phase)?"连接中":"等待连接";
         if("authorizing".equals(hub.phase)&&hub.verificationCode>0)connection="确认配对 · "+String.format(Locale.ROOT,"%04d",hub.verificationCode);
         connectionTitle.setText(connection);relayLabel.setText(hub.enabled?"中转开启":"中转关闭");relayLabel.setTextColor(hub.enabled?BLUE:MUTED);relayPower.color=hub.enabled?BLUE:MUTED;relayPower.invalidate();
         watchStatus.update(watchConnected?"已连接":"未连接",watchConnected?GREEN:MUTED);cameraStatus.update(ready?"已连接":"未连接",ready?GREEN:MUTED);
-        int battery=s.optInt("battery",-1);batteryStatus.update(battery>=0?battery+"%":"—",battery<0?MUTED:battery<=20?AMBER:WHITE);
+        int battery=s.optInt("battery",-1);batteryStatus.update(battery>=0?battery+"%":"—",battery<0?MUTED:battery<=20?RED:battery<=50?AMBER:GREEN);
         String gps=s.optString("gpsState",hub.gpsState);boolean gpsOn=hub.gpsEnabled;int gpsColor=!gpsOn?MUTED:"ready".equals(gps)?GREEN:"permission".equals(gps)||"denied".equals(gps)||"unavailable".equals(gps)?RED:AMBER;
         String gpsTitle=!gpsOn?"关闭":!hub.enabled?"暂停":"ready".equals(gps)?"已定位":"permission".equals(gps)||"denied".equals(gps)?"未授权":"provider_off".equals(gps)?"请打开定位":"stale".equals(gps)?"定位已过期":"unavailable".equals(gps)?"启动失败":"off".equals(gps)?"未启动":"定位中";
         gpsStatus.update(gpsTitle,gpsColor);
-        int seconds=s.optInt("recordSeconds",-1);timer.setText(!ready||!known?"--:--":String.format(Locale.ROOT,"%02d:%02d",rec&&seconds>=0?seconds/60:0,rec&&seconds>=0?seconds%60:0));timer.setTextColor(rec?RED:WHITE);
-        capture.mode=canStop?2:canStart?1:"starting".equals(phase)||"stopping".equals(phase)?3:0;capture.setEnabled(canStart||canStop);capture.setContentDescription(canStop?"停止录像":canStart?"开始录像":"等待相机状态");capture.invalidate();
-        captureLabel.setText("stopping".equals(phase)?"停止中":"starting".equals(phase)?"开始中":rec?"录像中":canStart?"待机":!hub.enabled?"先开启中转":!ready?"等待相机连接":"等待状态");captureLabel.setTextColor(rec?RED:MUTED);
+        recordingStatus.setText("录像状态："+("stopping".equals(phase)?"停止中":"starting".equals(phase)?"开始中":rec?"录像中":canStart?"待机":!hub.enabled?"先开启中转":!ready?"等待相机连接":"等待状态"));
+        recordingStatus.setTextColor(rec?RED:MUTED);
         if(cameraHint!=null)cameraHint.setText(s.optString("message","相机开机后，点击搜索"));
         if(deviceRows!=null){
             String key=String.join("|",hub.candidates.keySet());if(!key.equals(deviceKey)){deviceKey=key;deviceRows.removeAllViews();for(RelayHub.Candidate candidate:hub.candidates.values()){
@@ -232,11 +226,6 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         final IconView icon;final TextView value;
         StatusItem(String type){super(MainActivity.this);setOrientation(VERTICAL);setGravity(Gravity.CENTER);setMinimumHeight(dp(64));icon=new IconView(type,MUTED);addView(icon,new LinearLayout.LayoutParams(dp(27),dp(27)));Space gap=new Space(MainActivity.this);addView(gap,new LinearLayout.LayoutParams(1,dp(8)));value=label("—",12,MUTED,false);value.setGravity(Gravity.CENTER);addView(value);}
         void update(String text,int color){value.setText(text);value.setTextColor(color);icon.color=color;icon.invalidate();}
-    }
-    private final class CaptureView extends View {
-        int mode;final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
-        CaptureView(){super(MainActivity.this);setFocusable(true);setClickable(true);}
-        @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);float c=getWidth()/2f,r=Math.min(getWidth(),getHeight())/2f-dp(4);paint.setStyle(Paint.Style.FILL);paint.setColor(0xff16191f);canvas.drawCircle(c,c,r,paint);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(3));paint.setColor(mode==0?0xff414954:mode==3?AMBER:0xffe3e7ee);canvas.drawCircle(c,c,r,paint);paint.setStyle(Paint.Style.FILL);paint.setColor(mode==0?0xff303640:RED);if(mode==2)canvas.drawRoundRect(c-dp(31),c-dp(31),c+dp(31),c+dp(31),dp(12),dp(12),paint);else if(mode==3){paint.setColor(AMBER);for(int i=-1;i<=1;i++)canvas.drawCircle(c+dp(i*20),c,dp(5),paint);}else canvas.drawCircle(c,c,r-dp(17),paint);}
     }
     private final class IconView extends View {
         final String kind;int color;final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);

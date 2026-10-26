@@ -7,8 +7,8 @@
         <div class="status-item"><image class="status-icon" src="{{gpsIcon}}"></image></div>
         <div class="status-item"><image class="status-icon" src="{{batteryIcon}}"></image></div>
       </div>
+      <div class="capture" ontouchstart="startCapturePress" ontouchend="endCapturePress" ontouchcancel="endCapturePress"><image class="capture-image" src="{{captureIcon}}"></image></div>
       <text class="{{timerClass}}">{{timerText}}</text>
-      <div class="capture" onclick="tapCapture"><image class="capture-image" src="{{captureIcon}}"></image></div>
       <div class="edge-tools">
         <div class="edge-tool" onclick="refreshStatus"><image class="tool-icon" src="/common/ui/refresh.png"></image></div>
         <div class="edge-tool" onclick="openTools"><image class="tool-icon" src="/common/ui/more.png"></image></div>
@@ -42,7 +42,8 @@ export default {
     timerClass: 'timer',
     captureIcon: '/common/ui/capture-disabled.png',
     startEnabled: false,
-    stopEnabled: false
+    stopEnabled: false,
+    capturePressTimer: null
   },
   onInit() {
     this._relay = createRelayController({
@@ -70,7 +71,7 @@ export default {
     var pending = state.pending === true || phase === 'starting' || phase === 'stopping'
     this.phoneIcon = '/common/ui/phone-' + (phone ? 'on' : 'off') + '.png'
     this.cameraIcon = '/common/ui/camera-' + (camera ? 'on' : 'off') + '.png'
-    this.batteryIcon = '/common/ui/battery-' + (typeof state.battery === 'number' && state.battery >= 0 ? (state.battery <= 20 ? 'low' : 'on') : 'off') + '.png'
+    this.batteryIcon = '/common/ui/battery-' + (typeof state.battery === 'number' && state.battery >= 0 ? (state.battery <= 20 ? 'low' : state.battery <= 50 ? 'medium' : 'high') : 'off') + (typeof state.battery === 'number' && state.battery >= 0 ? '.svg' : '.png')
     var gps = state.gpsState || 'off'
     this.gpsIcon = '/common/ui/gps-' + (!state.gpsEnabled ? 'off' : gps === 'ready' ? 'on' : gps === 'denied' || gps === 'provider_off' || gps === 'unavailable' ? 'error' : 'wait') + '.png'
     var seconds = typeof state.recordSeconds === 'number' && state.recordSeconds >= 0 ? Math.floor(state.recordSeconds) : 0
@@ -86,12 +87,27 @@ export default {
     return (minutes < 10 ? '0' : '') + minutes + ':' + (remainder < 10 ? '0' : '') + remainder
   },
   onShow() { if (this._relay) this._relay.show() },
-  onHide() { if (this._relay) this._relay.hide() },
-  onDestroy() { if (this._relay) this._relay.destroy(); this._relay = null },
+  onHide() { this.endCapturePress(); if (this._relay) this._relay.hide() },
+  onDestroy() { this.endCapturePress(); if (this._relay) this._relay.destroy(); this._relay = null },
+  startCapturePress() {
+    if (this.stopEnabled) {
+      this._capturePressTimer = setTimeout(() => {
+        this._capturePressTimer = null
+        if (this.stopEnabled && this._relay) this._relay.command('stop')
+      }, 650)
+    } else if (this.startEnabled && this._relay) {
+      this._relay.command('start')
+    }
+  },
+  endCapturePress() {
+    if (this._capturePressTimer !== null && this._capturePressTimer !== undefined) {
+      clearTimeout(this._capturePressTimer)
+      this._capturePressTimer = null
+    }
+  },
   tapCapture() {
     if (!this._relay) return
-    if (this.stopEnabled) this._relay.command('stop')
-    else if (this.startEnabled) this._relay.command('start')
+    if (this.startEnabled && this._relay) this._relay.command('start')
   },
   openTools() { this.toolsOpen = true },
   closeTools() { this.toolsOpen = false },
@@ -105,9 +121,9 @@ export default {
 .status-strip { position: absolute; left: 73px; top: 48px; width: 320px; height: 51px; flex-direction: row; justify-content: center; }
 .status-item { width: 80px; height: 51px; align-items: center; justify-content: center; }
 .status-icon { width: 44px; height: 44px; }
-.timer { position: absolute; left: 98px; top: 135px; width: 270px; height: 45px; text-align: center; font-size: 39px; color: #f1f3f6; }
+.timer { position: absolute; left: 98px; top: 338px; width: 270px; height: 45px; text-align: center; font-size: 39px; color: #f1f3f6; }
 .timer-recording { color: #ff6165; }
-.capture { position: absolute; left: 137px; top: 182px; width: 192px; height: 192px; align-items: center; justify-content: center; }
+.capture { position: absolute; left: 137px; top: 137px; width: 192px; height: 192px; align-items: center; justify-content: center; }
 .capture-image { width: 192px; height: 192px; }
 .edge-tools { position: absolute; left: 151px; top: 402px; width: 164px; height: 50px; flex-direction: row; justify-content: space-between; }
 .edge-tool { width: 64px; height: 50px; border-radius: 25px; background-color: #1d2128; align-items: center; justify-content: center; }

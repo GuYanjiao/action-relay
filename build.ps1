@@ -11,6 +11,13 @@ param(
 $ErrorActionPreference='Stop'
 $projectRoot=$PSScriptRoot
 if($env:GITHUB_ACTIONS -ne 'true'){throw 'Package compilation is cloud-only. Push changes and use GitHub Actions.'}
+function Remove-GeneratedPath([string]$relative){
+  $path=Join-Path $projectRoot $relative
+  if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Recurse -Force}
+}
+Remove-GeneratedPath 'android\build'
+Remove-GeneratedPath 'watch\build'
+Remove-GeneratedPath 'watch\dist'
 $watchManifest=Get-Content -Raw (Join-Path $projectRoot 'watch/src/manifest.json')|ConvertFrom-Json
 [xml]$androidManifest=Get-Content -Raw (Join-Path $projectRoot 'android/AndroidManifest.xml')
 $androidNamespace='http://schemas.android.com/apk/res/android'
@@ -61,4 +68,8 @@ if(-not $SkipWatch){
   Push-Location (Join-Path $projectRoot 'watch')
   try{Run-Checked 'node' @($AiotCli,'build')}finally{Pop-Location}
 }
+Get-ChildItem -LiteralPath $build -Force -Exclude ("ActionRelay-$VersionName.apk") |
+  Remove-Item -Recurse -Force
+Remove-GeneratedPath 'watch\build'
+Remove-GeneratedPath 'watch\sign'
 Write-Output "Built $apk"
