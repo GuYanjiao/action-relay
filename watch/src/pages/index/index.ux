@@ -19,6 +19,7 @@
       <text class="tools-title">连接</text>
       <div class="tools-row"><image class="row-icon" src="{{phoneIcon}}"></image><text class="row-text">{{phoneText}}</text></div>
       <div class="tools-row"><image class="row-icon" src="{{cameraIcon}}"></image><text class="row-text">{{cameraText}}</text></div>
+      <div class="tools-row feedback-row" onclick="toggleFeedback"><text class="feedback-mark">振</text><text class="row-text">{{feedbackText}}</text></div>
       <text class="tools-note">{{noteText}}</text>
       <div class="refresh-button" onclick="refreshStatus"><image class="row-icon" src="/common/ui/refresh.png"></image><text class="refresh-label">刷新状态</text></div>
       <div class="back-button" onclick="closeTools"><image class="row-icon" src="/common/ui/back.png"></image><text class="back-label">返回</text></div>
@@ -48,9 +49,14 @@ export default {
     pressProgressTimer: null,
     pressProgress: 0,
     pressRingVisible: false,
-    pressProgressIcon: '/common/ui/press-0.png'
+    pressProgressIcon: '/common/ui/press-0.png',
+    feedbackEnabled: true,
+    feedbackText: '录制反馈：开启'
   },
   onInit() {
+    this._storage = require('@system.storage')
+    this._vibrator = require('@system.vibrator')
+    this.loadFeedbackSetting()
     this._relay = createRelayController({
       loadConnection: function () {
         var interconnect = require('@system.interconnect')
@@ -94,6 +100,27 @@ export default {
   onShow() { if (this._relay) this._relay.show() },
   onHide() { this.cancelPressFeedback(); if (this._relay) this._relay.hide() },
   onDestroy() { this.cancelPressFeedback(); if (this._relay) this._relay.destroy(); this._relay = null },
+  loadFeedbackSetting() {
+    this._storage.get({
+      key: 'capture_feedback_enabled',
+      default: '1',
+      success: (value) => {
+        this.feedbackEnabled = value !== '0'
+        this.feedbackText = '录制反馈：' + (this.feedbackEnabled ? '开启' : '关闭')
+      }
+    })
+  },
+  toggleFeedback() {
+    this.feedbackEnabled = !this.feedbackEnabled
+    this.feedbackText = '录制反馈：' + (this.feedbackEnabled ? '开启' : '关闭')
+    this._storage.set({
+      key: 'capture_feedback_enabled',
+      value: this.feedbackEnabled ? '1' : '0'
+    })
+  },
+  playFeedback(mode) {
+    if (this.feedbackEnabled && this._vibrator) this._vibrator.vibrate({ mode: mode })
+  },
   startCapturePress() {
     if (this.stopEnabled) {
       this.cancelPressFeedback()
@@ -107,9 +134,13 @@ export default {
         this.pressProgress = 100
         this.updatePressProgressIcon()
         this.clearPressProgressTimer()
-        if (this.stopEnabled && this._relay) this._relay.command('stop')
+        if (this.stopEnabled && this._relay) {
+          this.playFeedback('long')
+          this._relay.command('stop')
+        }
       }, 650)
     } else if (this.startEnabled && this._relay) {
+      this.playFeedback('short')
       this._relay.command('start')
     }
   },
@@ -185,6 +216,7 @@ export default {
 .tools-title { width: 270px; height: 46px; text-align: center; font-size: 27px; color: #f1f3f6; }
 .tools-row { width: 290px; height: 48px; flex-direction: row; align-items: center; }
 .row-icon { width: 27px; height: 27px; margin-right: 13px; }
+.feedback-mark { width: 27px; height: 27px; margin-right: 13px; text-align: center; font-size: 19px; color: #6ad9a4; }
 .row-text { width: 245px; font-size: 20px; color: #cbd3df; }
 .tools-note { width: 292px; height: 74px; font-size: 18px; color: #a6b0bf; lines: 3; margin-top: 10px; }
 .refresh-button { width: 280px; height: 64px; border-radius: 24px; background-color: #202630; flex-direction: row; align-items: center; justify-content: center; margin-top: 8px; }

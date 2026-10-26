@@ -7,10 +7,20 @@ import {fileURLToPath} from 'node:url';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const code = fs.readFileSync(path.join(root,'build/pages/index/index.js'),'utf8');
 const sent=[];
+const vibrations=[];
+let feedbackValue='1';
 let timerId=0;
 const timers=new Map();
 const connect={send:opts=>{sent.push(opts.data);opts.success();},getReadyState:opts=>opts.success({status:1})};
-const native=name=>{assert.equal(name,'@app-module/system.interconnect');return {instance:()=>connect};};
+const native=name=>{
+  if(name==='@app-module/system.interconnect') return {instance:()=>connect};
+  if(name==='@system.storage') return {
+    get:opts=>opts.success(feedbackValue),
+    set:opts=>{feedbackValue=opts.value;}
+  };
+  if(name==='@system.vibrator') return {vibrate:opts=>vibrations.push(opts.mode)};
+  assert.fail(`unexpected native module: ${name}`);
+};
 const global={$app_require$:native,setTimeout:fn=>{timers.set(++timerId,fn);return timerId;},clearTimeout:id=>timers.delete(id)};
 const context=vm.createContext({$app_require$:native,aiot:{
   __ce__:(tag,data,children)=>{
@@ -30,6 +40,7 @@ assert.equal(page.startEnabled,true);assert.equal(page.stopEnabled,false);
 const dom=page.template(page);
 const rendered=JSON.stringify(dom);
 assert.equal(page.captureIcon,'/common/ui/capture-record.png');
+assert.equal(page.feedbackEnabled,true);
 assert.equal(typeof page.startCapturePress,'function');
 assert.match(rendered,/"remote"/);
 assert.match(rendered,/"status-strip"/);
@@ -40,6 +51,7 @@ assert.equal((rendered.match(/"status-icon"/g)||[]).length,4);
 function byClass(node,name){return (node.opts.classList||[]).includes(name)?node:(node.children||[]).map(n=>byClass(n,name)).find(Boolean);}
 const capture=byClass(dom,'capture');assert.equal(typeof capture.opts.events.touchstart,'function');
 capture.opts.events.touchstart({});const command=sent.find(x=>x.type==='command');assert.ok(command);
+assert.deepEqual(vibrations,['short']);
 assert.equal(command.session,'s');assert.equal(command.ticket,'t');
 assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,false);
 connect.onmessage({data:JSON.stringify({v:1,type:'result',id:command.id,ok:true,phase:'confirmed'})});
@@ -53,6 +65,7 @@ assert.equal(page.pressRingVisible,true);
 assert.match(page.pressProgressIcon,/press-0\.png$/);
 const stopTimerId=[...timers.keys()].at(-1);const stopTimer=timers.get(stopTimerId);assert.equal(typeof stopTimer,'function');timers.delete(stopTimerId);stopTimer();
 assert.equal(sent.filter(x=>x.type==='command'&&x.action==='stop').length,1);
+assert.deepEqual(vibrations,['short','long']);
 assert.equal(page.pressProgress,100);
 page.applyState({phoneConnected:true,cameraReady:true,gpsEnabled:true,gpsState:'provider_off',recordPhase:'idle',canStart:true,canStop:false});
 assert.equal(page.gpsIcon,'/common/ui/gps-error.png');

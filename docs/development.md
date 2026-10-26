@@ -11,7 +11,7 @@ Action Relay 由两部分组成：
 
 Android 字节码目标使用 `javac --release 8`；这表示字节码兼容目标，不表示
 必须使用旧版 JDK。Android `targetSdk` 保持 36，以维持现有权限和运行行为
-契约。手表包的版本与 Android manifest 保持 `0.3.5` / versionCode `8`。
+契约。手表包的版本与 Android manifest 保持 `0.4.0` / versionCode `9`。
 
 ## 云端构建与签名
 
@@ -93,7 +93,11 @@ GPS 只发送手机真实测量值，并保留新鲜度、质量和完整性判�
 
 手机和手表状态栏的顺序固定为手机、相机、GPS、电量；电量颜色统一为低电量红色、
 中等电量黄色、高电量绿色，未知电量使用灰色。手表录制按钮居中，开始支持轻触，
-停止必须长按，已录制时间显示在按钮下方。
+停止必须长按，已录制时间显示在按钮下方。录制反馈使用官方
+`@system.vibrator.vibrate` 接口：开始录像为短振，长按停止成功后为长振；设置页
+可关闭并通过 `@system.storage` 持久化。官方文档列出的 `vibrator.start/stop`
+与系统默认振动模式不支持 Xiaomi Watch S4。当前公开接口目录也没有目标设备可
+验证的声音播放接口，因此 0.4.0 不加入声音调用，避免使用未公开或不兼容的模块。
 
 ## 变更入口
 
@@ -112,3 +116,7 @@ APK/RPK，删除 dex、classes、资源中间包和手表签名工作目录；�
 工作区或上传物。正式 APK/RPK 体积应与项目源码、依赖安装目录和本地缓存分开统计。
 
 维护记录：[项目状态](maintainers/status.md)、[云端验收](validation/)、[停止确认机制](testing/stop-confirmation.md)。早期检查清单属于历史任务记录，当前目录与执行方式以本文及 AGENTS.md 为准。
+
+本轮 Vela 资料来源：[振动 vibrator](https://iot.mi.com/vela/quickapp/zh/features/system/vibrator.html)、
+[数据存储 storage](https://iot.mi.com/vela/quickapp/zh/features/data/storage.html)、
+[官方 JS 应用接口目录](https://iot.mi.com/vela/quickapp/zh/features/)。
