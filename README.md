@@ -1,38 +1,70 @@
 # Action Relay
 
-国行 Xiaomi Watch S4 → 小米安卓手机 → DJI Osmo Action 4 的蓝牙录像遥控工具。
+通过安卓手机中转，用 Xiaomi Watch S4 控制 DJI Osmo Action 4 开始/停止录像，并将手机 GNSS 数据发送给相机。
 
-用户设备：S4 3.201.79；小米 17 / 澎湃 OS 4 / Android 17；Action 4。
+当前版本：**0.3.2 / versionCode 5**。主分支为 `main`。安装包只由 GitHub Actions 构建，使用固定发布证书。
 
-`v0.2.0` 是用户已实测基本可用的手机中转基线。当前 `work/v0.3-watch-first` 为 `0.3.1`：已生成两端安装包并通过本机构建与回归，等待新一轮真机验收。
+## 当前状态
 
-## 当前版本
+| 项目 | 状态 |
+|---|---|
+| 基础录像遥控 | 用户已实测早期中转版基本可用 |
+| 停止确认 | 已加入状态确认、超时与迟到回报处理；边界情况仍需真机验收 |
+| 手机 GPS | 已修复运行中开启 GPS 未实际订阅定位的问题；完整 GNSS 与视频 GPS 嵌入待实测 |
+| 手表界面 | 纯黑底、四个 44px 状态图标、大录制按键、计时；移除标题、绿点和多余文字 |
+| 手机界面 | 原生 Java 的 miuix 风格，未使用 Compose Miuix 库 |
+| 相机记忆/磁贴 | 已有入口；冷启动重连、锁屏和持续状态刷新仍需完善与验证 |
+| 云端构建/回归/固定签名 | 已通过，[验收记录](docs/cloud-acceptance-0.3.2.md) |
 
-- 手表优先：参考 Osmo 自家遥控器的图形控制，192 px 主触控区、简短状态与图标。
-- 停止确认：支持覆盖尚未确认的开始操作、等待状态稳定、处理迟到确认。
-- 手机 GNSS：依据大疆官方 00/17 数据帧，发送真实且新鲜的完整定位；录像指令优先。
-- 手机界面：原生 Java 实现 miuix 风格卡片与图形控件，尚未迁移到 Compose / Miuix 库。
-- 相机记忆、安全重连、Android 快捷设置磁贴。
+用户提供的测试设备为国行 Watch S4（3.201.79）、小米 17（澎湃 OS 4 / Android 17）和 Action 4。构建与自动回归通过，不代表所有设备行为已经得到证明。
 
-0.3.1 修复了中转运行时打开 GPS 只改开关、没有实际订阅定位的问题，并提供权限、定位开关、完整测量等待和启动失败的具体说明。手表采用纯黑背景，删除顶部标题/绿点和图标下的文字，四个状态图标放大到 44px，删除录制按钮下方文字。
+## 下载与安装
 
-当前两端集成和整包编译已完成；构建通过不代表真机定位和视频 GPS 嵌入已经验证。最新任务与复核见 [检查清单目录](docs/copilot-checklists/)，验证证据见 [COPILOT_STATUS.md](COPILOT_STATUS.md)。旧交接单保留为历史参考。
+1. 登录有仓库访问权限的 GitHub 账号，打开 [Build packages](https://github.com/GuYanjiao/action-relay/actions/workflows/build.yml)。
+2. 选择 `main` 的成功构建，在 **Artifacts** 下载 `action-relay-版本-提交号`。
+3. 解压后得到手机 APK、手表 RPK 和公开的 `signing-report.json`。请使用同一次构建的两端包。
+4. 手机安装 APK，手表使用现有的 Vela 快应用安装方式安装 RPK。手机端开启中转，完成附近设备及手表通信授权，再搜索连接相机。
+5. 需要 GPS 时打开 GPS，允许精确位置，并在开阔处等待真实测量。GPS 详情和工具日志会显示具体原因，日志不记录经纬度。
 
-## 界面方向
+首次从旧测试签名切换到 0.3.2 固定发布证书，需要重新安装手机端和手表端。卸载手机应用会清除本应用的记忆设置，重装后需重新连接和授权。后续版本沿用固定证书更新。
 
-以下为早期布局参考图；0.3.1 已按用户实机反馈进一步精简手表界面。这些图片不是当前设备渲染或运行证明。
+GitHub Release 中的 `v0.2.0` 是历史版本，不代表当前主分支。Actions 附件保留 30 天；过期后可在 `main` 手动触发云端构建。
 
-![S4 遥控界面预览](docs/images/watch-preview.png)
+## 使用与排查
 
-![手机界面预览](docs/images/phone-preview.png)
+- 手表按键根据状态发送明确的开始或停止指令，不自动重放开始操作。
+- 停止结果以相机回报为准；等待、超时或状态未知不能当作已停止。
+- GPS 的权限不足、手机定位关闭、等待首次定位、等待完整测量、过期和启动失败分别显示。收到位置点不等于已满足相机 GPS 数据帧的全部要求。
+- 首次安装后可核对系统位置访问记录；仍未就绪时，请提供 GPS 详情中的具体提示。
+- 停止保存、快速开始后停止、锁屏、断线恢复、磁贴与 Mimo GPS 仪表盘仍需真机验证。
 
-## 工程与协作
+## 固定签名
 
-- `android/src`：原生手机应用，含 BLE、中转、协议、GNSS 模块。
-- `watch/src`：Vela 快应用，仅用 `system.interconnect` 与手机通信。
-- `scripts/build-local.ps1`：在本机定位 SDK / JDK / Vela 工具链并构建。
-- `scripts/test.ps1`：协议、队列、GPS、手表回归检查。
-- [AGENTS.md](AGENTS.md)：Codex 与 Copilot 共用的项目约定。
-- [COPILOT_HANDOFF.md](COPILOT_HANDOFF.md)：目前未完成的任务、边界与验收方式。
+APK 与 RPK 使用同一个 PKCS12 条目 `guyanjiao-release`。证书 SHA-256：
 
-两端包名和证书必须一致。签名私钥、本机配置、位置轨迹及个人日志不进 Git；源码内保留第三方说明。新版本必须通过实机拍摄、保存后状态、锁屏和 GPS 视频数据验证。
+```text
+6CC93023797565C425CA5771E27F64692CA1FB934018075A4DB6612B35FEE0C0
+```
+
+GitHub Actions 从 Secrets 恢复密钥，核对固定指纹并签名；缺失配置或证书不匹配会失败，不生成临时签名。私钥和口令不进入 Git、日志或安装包附件。公开签名报告用于核对版本、证书和包哈希。
+
+Git 提交/标签的 OpenPGP 签名与安装包签名是独立机制；后续 Git 提交和标签使用用户配置的 OpenPGP 密钥签名。
+
+## 开发与协作
+
+**本地编辑与静态检查 → 签名提交推送 → 云端构建、回归与签名校验 → 下载配套安装包**。不再运行本地 Android/Vela/Java 编译，`scripts/build-local.ps1` 已禁用。
+
+云端运行协议与停止确认、GPS 编码/质量与生命周期、发送队列、手表控制器和编译后页面测试，再验证 APK 密码学签名、固定指纹与两端包配对。
+
+| 路径 | 用途 |
+|---|---|
+| `android/src` | 原生手机中转、DJI BLE、GNSS 与磁贴 |
+| `watch/src` | Vela 手表界面与通信控制器 |
+| `.github/workflows` | 云端回归和成对打包 |
+| `signing/release-signing.json` | 公开签名别名和证书指纹，不含密钥 |
+| `docs/copilot-checklists` | 按日期保存的任务和复核清单 |
+| `docs/history` | 旧交接与旧状态记录 |
+
+Copilot 通过[自动派发入口](docs/copilot-workflow.md)接收任务，同一批文件保持一个写入者。执行前阅读 [AGENTS.md](AGENTS.md)、[交接索引](COPILOT_HANDOFF.md)和[项目状态](COPILOT_STATUS.md)。
+
+AstroBox 尚未接入，利弊与验证建议见[迁移评估](docs/astrobox-assessment.md)。第三方说明见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.txt)。
