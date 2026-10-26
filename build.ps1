@@ -54,8 +54,8 @@ $archive=[System.IO.Compression.ZipFile]::Open("$build\unsigned.apk",[System.IO.
 try{Get-ChildItem -LiteralPath "$build\dex" -Filter '*.dex' -File|ForEach-Object {[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$_.FullName,$_.Name,[System.IO.Compression.CompressionLevel]::Optimal)|Out-Null}}finally{$archive.Dispose()}
 Run-Checked "$BuildTools\zipalign.exe" @('-f','4',"$build\unsigned.apk","$build\aligned.apk")
 $apk=Join-Path $build ("ActionRelay-$VersionName.apk")
-Run-Checked "$JdkBin\java.exe" @('-jar',"$BuildTools\lib\apksigner.jar",'sign','--ks',$SigningKeystore,'--ks-key-alias',$SigningAlias,'--ks-pass','env:ACTION_RELAY_STORE_PASSWORD','--key-pass','env:ACTION_RELAY_KEY_PASSWORD','--out',$apk,"$build\aligned.apk")
-Run-Checked "$JdkBin\java.exe" @('-jar',"$BuildTools\lib\apksigner.jar",'verify','--verbose','--print-certs',$apk)
+Run-Checked "$JdkBin\java.exe" @('--enable-native-access=ALL-UNNAMED','-jar',"$BuildTools\lib\apksigner.jar",'sign','--ks',$SigningKeystore,'--ks-key-alias',$SigningAlias,'--ks-pass','env:ACTION_RELAY_STORE_PASSWORD','--key-pass','env:ACTION_RELAY_KEY_PASSWORD','--out',$apk,"$build\aligned.apk")
+Run-Checked "$JdkBin\java.exe" @('--enable-native-access=ALL-UNNAMED','-jar',"$BuildTools\lib\apksigner.jar",'verify','--verbose','--print-certs',$apk)
 if(-not $SkipWatch){
   if(-not (Test-Path -LiteralPath $AiotCli)){throw 'Pass -AiotCli (aiot-toolkit lib/bin.js) for the watch build.'}
   Push-Location (Join-Path $projectRoot 'watch')

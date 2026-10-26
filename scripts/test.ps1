@@ -5,6 +5,7 @@ function Checked([string]$exe,[string[]]$arguments){& $exe @arguments;if($LASTEX
 Push-Location $root
 try{
  if($Area -ne 'watch'){
+  & (Join-Path $root 'tests/signing/VerifySigner.test.ps1')
   $classes=Join-Path $root 'test-classes';New-Item -ItemType Directory -Force -Path $classes|Out-Null
   $files=@(Get-ChildItem 'android/src/cn/local/actionrelay/protocol' -Filter '*.java' -File|ForEach-Object{$_.FullName})
   $files+=@((Get-Item 'android/src/cn/local/actionrelay/FrameQueue.java').FullName)

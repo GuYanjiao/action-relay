@@ -77,13 +77,14 @@ jobs:
       - name: Verify APK signature
         shell: pwsh
         run: |
-          $apksigner = Join-Path $env:ANDROID_SDK_ROOT 'build-tools\37.0.0\apksigner.bat'
-          $details = & $apksigner verify --verbose --print-certs "android\build\ActionRelay-$env:VERSION_NAME.apk"
+          $apksigner = Join-Path $env:ANDROID_SDK_ROOT 'build-tools\37.0.0\lib\apksigner.jar'
+          $java = Join-Path $env:JAVA_HOME 'bin\java.exe'
+          $details = & $java --enable-native-access=ALL-UNNAMED -jar $apksigner verify --verbose --print-certs "android\build\ActionRelay-$env:VERSION_NAME.apk"
           if ($LASTEXITCODE -ne 0) { throw 'APK cryptographic signature verification failed.' }
           $details | Write-Output
-          $actual = [regex]::Match(($details -join "`n"),'Signer #1 certificate SHA-256 digest: ([a-fA-F0-9]+)').Groups[1].Value
           $expected = (Get-Content -Raw signing/release-signing.json | ConvertFrom-Json).certificateSha256
-          if ($actual.ToUpperInvariant() -ne $expected) { throw 'APK signer differs from the fixed certificate.' }
+          . ./scripts/assert-apk-signer.ps1
+          Assert-ApkSigner -Details $details -ExpectedFingerprint $expected
       - name: Run complete regression suite
         shell: pwsh
         run: ./scripts/test.ps1 -Area all
