@@ -36,7 +36,7 @@ public final class XiaomiWatchBridge {
     private MessageApi messages;
     private ServiceApi service;
     private boolean running,querying,authorizing,checking,registering;
-    private String nodeId="",registeredNode="",lastState="",lastError="";
+    private String nodeId="",registeredNode="",autoRequestedNode="",lastState="",lastError="";
     private long lastErrorAt;
     private long lastMessageAt;
     private final WatchOutbox outbound=new WatchOutbox();
@@ -64,7 +64,7 @@ public final class XiaomiWatchBridge {
     public void stop(){
         running=false;generation++;main.removeCallbacks(poll);querying=false;checking=false;registering=false;authorizing=false;
         clearSends();
-        detach();nodeId="";
+        detach();nodeId="";autoRequestedNode="";
         if(service!=null)try{service.unregisterServiceConnectionListener(serviceListener);}catch(Exception ignored){}
         state("中转已关闭");
     }
@@ -74,7 +74,7 @@ public final class XiaomiWatchBridge {
     private final OnServiceConnectionListener serviceListener=new OnServiceConnectionListener(){
         public void onServiceConnected(){main.post(()->{if(running){state("小米运动健康服务已连接");refresh();}});}
         public void onServiceDisconnected(){main.post(()->{
-            if(!running)return;generation++;clearSends();registeredNode="";nodeId="";checking=false;registering=false;querying=false;
+            if(!running)return;generation++;clearSends();registeredNode="";nodeId="";autoRequestedNode="";checking=false;registering=false;querying=false;
             state("小米运动健康服务已断开");
         });}
     };
@@ -86,7 +86,7 @@ public final class XiaomiWatchBridge {
                 if(!running||run!=generation)return;querying=false;
                 Node selected=select(list);
                 if(selected==null){detach();nodeId="";state("未找到已连接手表，请检查小米运动健康");return;}
-                if(!selected.id.equals(nodeId)){detach();nodeId=selected.id;checking=false;registering=false;}
+                if(!selected.id.equals(nodeId)){detach();nodeId=selected.id;autoRequestedNode="";checking=false;registering=false;}
                 if(registeredNode.equals(nodeId))return;
                 checkAndListen(run,nodeId);
             })).addOnFailureListener(error->main.post(()->{
@@ -103,18 +103,40 @@ public final class XiaomiWatchBridge {
         return null;
     }
     private void checkAndListen(int run,String id){
-        if(checking||registering)return;checking=true;
+        if(checking||registering||authorizing)return;checking=true;
         try{
             auth.checkPermission(id,Permission.DEVICE_MANAGER).addOnSuccessListener(granted->main.post(()->{
                 if(!running||run!=generation||!id.equals(nodeId))return;checking=false;
                 if(Boolean.TRUE.equals(granted))attach(run,id);
-                else state("需要点击“手表通信授权”");
+                else autoRequest(run,id);
             })).addOnFailureListener(error->main.post(()->{
                 if(!running||run!=generation||!id.equals(nodeId))return;checking=false;
                 state("通信授权尚未就绪");report("查询手表授权失败",error);
             }));
         }catch(Exception error){checking=false;report("查询手表授权异常",error);}
         main.postDelayed(()->{if(run==generation&&id.equals(nodeId))checking=false;},12000);
+    }
+    private void autoRequest(int run,String id){
+        if(id.equals(autoRequestedNode)){state("需要点击“手表通信授权”");return;}
+        autoRequestedNode=id;state("正在申请手表通信授权");
+        requestPermission(run,id);
+    }
+    private void requestPermission(int run,String id){
+        if(authorizing||!ensureApis())return;
+        authorizing=true;
+        try{
+            auth.requestPermission(id,Permission.DEVICE_MANAGER)
+                .addOnSuccessListener(granted->main.post(()->{
+                    if(!running||run!=generation||!id.equals(nodeId)){authorizing=false;return;}
+                    authorizing=false;
+                    if(Boolean.TRUE.equals(granted)){state("通信授权已就绪");attach(run,id);}
+                    else state("需要点击“手表通信授权”");
+                })).addOnFailureListener(error->main.post(()->{
+                    if(!running||run!=generation||!id.equals(nodeId)){authorizing=false;return;}
+                    authorizing=false;state("通信授权尚未就绪");report("申请通信授权失败",error);
+                }));
+        }catch(Exception error){authorizing=false;report("申请通信授权异常",error);}
+        main.postDelayed(()->{if(run==generation&&id.equals(nodeId))authorizing=false;},45000);
     }
     private void attach(int run,String id){
         if(registering||id.equals(registeredNode))return;registering=true;

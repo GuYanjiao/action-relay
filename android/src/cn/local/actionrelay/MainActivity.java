@@ -155,6 +155,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
     private void showToolsPanel(){
         LinearLayout content=sheet("工具");
         addAction(content,"key","手表通信授权",this::authorizeWatch);
+        addAction(content,"info","保持手表连接",this::showKeepConnectedHelp);
         addAction(content,"tile","添加快捷磁贴",()->RecordingTileService.requestAdd(this));
         LinearLayout auto=row();auto.setMinimumHeight(dp(72));auto.setGravity(Gravity.CENTER_VERTICAL);auto.setPadding(dp(16),0,dp(10),0);auto.setBackground(round(SURFACE,22));
         LinearLayout words=column();addText(words,"自动重连",17,WHITE,true);addText(words,"仅重连相机，不自动录像",12,MUTED,false);auto.addView(words,new LinearLayout.LayoutParams(0,-2,1));
@@ -168,6 +169,19 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
     }
     private void showLogsPanel(){LinearLayout content=sheet("连接记录");logsView=addText(content,"",12,MUTED,false);logsView.setTypeface(Typeface.MONOSPACE);logsView.setTextIsSelectable(true);showSheet();render();}
     private void openAppSettings(){startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}
+    private void openCompanionSettings(){
+        for(String pkg:new String[]{"com.mi.health","com.xiaomi.wearable"}){
+            try{getPackageManager().getPackageInfo(pkg,0);}catch(Exception e){continue;}
+            try{startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+pkg)));return;}catch(Exception ignored){}
+        }
+        toast("未找到小米运动健康");
+    }
+    private void showKeepConnectedHelp(){
+        new AlertDialog.Builder(this).setTitle("保持手表连接")
+            .setMessage("手表断连，多数是“小米运动健康”被系统在后台清理。按下面三步设置一次，之后通常无需再打开它：\n\n1. 省电不受限：在系统设置里找到“小米运动健康”，把省电策略设为“无限制”。\n\n2. 允许自启动：在自启动管理中允许“小米运动健康”开机或后台自启动。\n\n3. 后台锁定：在多任务界面长按“小米运动健康”并点“锁定”。\n\n通信授权只需首次同意一次，本应用会自动检测并重连手表。")
+            .setPositiveButton("打开小米运动健康设置",(d,w)->openCompanionSettings())
+            .setNegativeButton("知道了",null).show();
+    }
 
     private LinearLayout sheet(String title){
         if(panel!=null)panel.dismiss();deviceRows=null;cameraHint=null;gpsDetail=null;logsView=null;gpsSwitch=null;autoSwitch=null;
