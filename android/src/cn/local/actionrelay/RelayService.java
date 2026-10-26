@@ -29,7 +29,14 @@ public final class RelayService extends Service {
             .addAction(new Notification.Action.Builder(null,"关闭中转",stop).build()).build();
         int type=ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
         if(hub.gpsEnabled)type|=ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
-        startForeground(41, note, type);
+        try{startForeground(41, note, type);}
+        catch(SecurityException|IllegalStateException error){
+            if(hub.gpsEnabled)hub.setGpsStartError("系统拒绝定位前台服务："+error.getClass().getSimpleName());
+            hub.log("前台服务启动失败："+error.getClass().getSimpleName());
+            if(RECONFIGURE.equals(intent==null?null:intent.getAction()))return START_NOT_STICKY;
+            stopSelf();return START_NOT_STICKY;
+        }
+        if(RECONFIGURE.equals(intent==null?null:intent.getAction())){hub.reconfigureGps();return START_NOT_STICKY;}
         hub.start();return START_NOT_STICKY;
     }
     @Override public IBinder onBind(Intent intent){return null;}

@@ -3,6 +3,7 @@ name: Build packages
 on:
   workflow_dispatch:
   push:
+    branches: ['work/**']
     tags: ['v*']
 
 permissions:
@@ -12,7 +13,7 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      VERSION_NAME: '0.3.0'
+      VERSION_NAME: '0.3.1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -25,9 +26,8 @@ jobs:
           cache: npm
           cache-dependency-path: watch/package-lock.json
       - uses: android-actions/setup-android@v3
-      - name: Install Android SDK
-        shell: pwsh
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - name: Install watch dependencies
         working-directory: watch
         run: npm ci
