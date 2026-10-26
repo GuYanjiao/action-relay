@@ -1,9 +1,19 @@
 # 接手状态
 
-- 当前：A/B/C 已接入，D 阶段正在进行构建与交付准备。
+## 最终复核：0.3.1（2026-10-26）
+
+- Copilot 两轮实现已结束；Codex 接手补齐生命周期协调器、非关键监听异常的兼容处理、定位诊断和编译后页面测试，当前无并行应用写入者。
+- 已修复运行中开启 GPS 未订阅定位的问题；服务成功提升 location 类型后配置 GPS，GPS 重配不重建相机/手表连接。失败可重试，关闭与停止清理，失效速度不残留。
+- 四个手表图标为 44px；页面、主容器、工具页与 manifest 均纯黑；标题、绿点、四个图标下的文字、录制按钮下的文字已去掉。录像图形状态、计时与工具入口保留。
+- 独立复跑通过：协议 43 项、停止状态机 55 项、GPS 编码/质量 44 项、GPS 生命周期 10 项、队列检查、11 个手表控制器场景，以及真正展开条件模板并点击编译后事件的页面检查。
+- 最新 APK/RPK 构建、APK 密码学签名验证、同证书/CRC/包内私钥排除检查均通过；版本 0.3.1 / 4。产物取 android/build 与 watch/dist 的最新构建，旧的下方散列仅作为历史记录。
+- 仍需手机/Watch S4/Action 4 真机复测：系统位置访问记录、真实 GNSS 完整测量、圆屏显示、视频 GPS 数据。当前自动测试不提供这些硬件证明。
+- 后续 Git 提交与标签按用户指定 OpenPGP 密钥签名；不因此更换 APK/RPK 原签名。
+
+- 当前：GPS 启动生命周期与手表精简 UI 已完成，D 阶段构建交付已完成。
 - 应用文件写入者：Copilot（Codex 已冻结应用编辑）。
 - 分支：`work/v0.3-watch-first`。
-- 基线：`main` / `v0.2.0`；本分支目标为 `v0.3.0` / `versionCode 3`。
+- 基线：`main` / `v0.2.0`；本分支目标为 `v0.3.1` / `versionCode 4`。
 - 发布状态：已完成本地 APK/RPK 构建和包校验；尚未真机验证，不创建 release。
 
 ## 本轮已完成（2026-10-26）
@@ -35,8 +45,8 @@
 - 本地交付产物：
   - `artifacts/ActionRelay-0.3.0.apk`
   - `artifacts/cn.local.actionrelay.debug.0.3.0.rpk`
-  - APK SHA-256：`0317e59e1b09d0fe1568c8e9cac3f217f56caa125396205c7cb7315ba9066769`
-  - RPK SHA-256：`f66847ee491b330f454193abd4c51e3207d84000dc442b3e5f3adfd3a479f46e`
+  - APK SHA-256：`60cf8bc48cd79abb4d30cd3528a32fbefa7b11657c227a78362b8381af2e1453`
+  - RPK SHA-256：`389b64e4fddae4def6aaf91baf8fb7af37ea9a2726bbec2394e9de01cfd7570a`
 
 ## 尚未完成 / 阻塞
 
@@ -46,6 +56,22 @@
 - 云编译工作流已在 GitHub runner 上成功执行（run `40266562983`，提交 `95a11f5`）。
 - 上一次 GitHub Actions 云编译失败在 SDK 初始化阶段：`android-actions/setup-android@v3` 默认尝试安装已废弃的 `tools` 包，尚未进入项目编译。
 - 尚未完成真实 Watch S4、锁屏停止保存和 Mimo GPS 仪表盘验证。
+
+## 本轮 GPS/手表 UI 交付（2026-10-26）
+
+- `RelayService.RECONFIGURE` 现在先提升 location 前台服务类型，再调用 `RelayHub.reconfigureGps()`，不重建 BLE、手表连接或相机 session。
+- `PhoneGps` 保留 GPS_PROVIDER 位置订阅，即使可选 GNSS/NMEA 附加监听失败；记录去重的订阅异常和首个真实 fix 诊断，不含坐标，并区分权限、定位开关、过期和启动失败。
+- 手表主界面改为纯黑背景，删除 ACTION 4/绿点/状态文字/录制标签，四个状态图标放大到 44px，保留计时、主键、刷新和工具页。
+- Android/Watch/CI/校验默认版本统一为 `0.3.1` / `versionCode 4`。
+
+## 本轮精确检查
+
+- `scripts/test.ps1 -Area all`：43 协议、55 会话、44 GPS、FrameQueue、11 手表控制器场景、编译后页面测试全部通过。
+- `scripts/build-local.ps1`：APK/RPK 构建成功；产物已保存到 `artifacts/ActionRelay-0.3.1.apk` 和 `artifacts/cn.local.actionrelay.debug.0.3.1.rpk`。
+- `node --check verify-pair.mjs` 与 `node verify-pair.mjs`：通过 CRC、同一证书、Watch feature、APK DEX/Manifest、无私钥检查。
+- `git diff --check`：通过。
+- 尚未完成真机验证：Watch S4 实际 GPS 开关/定位访问记录、锁屏停止保存、视频 GPS 仪表盘嵌入、磁贴运行时行为。
+- 本次复核未创建或推送提交；派发的本地 Copilot run 未产生 `result.md`，已在当前工作树完成同一清单的复核与验证。
 
 ## 下一步
 

@@ -1,19 +1,14 @@
 <template>
   <div class="page">
     <div class="remote" if="{{!toolsOpen}}">
-      <div class="heading">
-        <div class="{{ledClass}}"></div>
-        <text class="model">ACTION 4</text>
-      </div>
       <div class="status-strip">
-        <div class="status-item"><image class="status-icon" src="{{phoneIcon}}"></image><text class="status-label">{{phoneLabel}}</text></div>
-        <div class="status-item"><image class="status-icon" src="{{cameraIcon}}"></image><text class="status-label">{{cameraLabel}}</text></div>
-        <div class="status-item"><image class="status-icon" src="{{gpsIcon}}"></image><text class="status-label">{{gpsLabel}}</text></div>
-        <div class="status-item"><image class="status-icon" src="{{batteryIcon}}"></image><text class="status-label">{{batteryLabel}}</text></div>
+        <div class="status-item"><image class="status-icon" src="{{phoneIcon}}"></image></div>
+        <div class="status-item"><image class="status-icon" src="{{cameraIcon}}"></image></div>
+        <div class="status-item"><image class="status-icon" src="{{gpsIcon}}"></image></div>
+        <div class="status-item"><image class="status-icon" src="{{batteryIcon}}"></image></div>
       </div>
       <text class="{{timerClass}}">{{timerText}}</text>
       <div class="capture" onclick="tapCapture"><image class="capture-image" src="{{captureIcon}}"></image></div>
-      <text class="capture-label">{{captureLabel}}</text>
       <div class="edge-tools">
         <div class="edge-tool" onclick="refreshStatus"><image class="tool-icon" src="/common/ui/refresh.png"></image></div>
         <div class="edge-tool" onclick="openTools"><image class="tool-icon" src="/common/ui/more.png"></image></div>
@@ -43,15 +38,9 @@ export default {
     cameraIcon: '/common/ui/camera-off.png',
     gpsIcon: '/common/ui/gps-off.png',
     batteryIcon: '/common/ui/battery-off.png',
-    phoneLabel: '未连',
-    cameraLabel: '未连',
-    gpsLabel: 'GPS 关',
-    batteryLabel: '—',
     timerText: '--:--',
     timerClass: 'timer',
-    ledClass: 'led led-off',
     captureIcon: '/common/ui/capture-disabled.png',
-    captureLabel: '等待连接',
     startEnabled: false,
     stopEnabled: false
   },
@@ -81,21 +70,15 @@ export default {
     var pending = state.pending === true || phase === 'starting' || phase === 'stopping'
     this.phoneIcon = '/common/ui/phone-' + (phone ? 'on' : 'off') + '.png'
     this.cameraIcon = '/common/ui/camera-' + (camera ? 'on' : 'off') + '.png'
-    this.phoneLabel = phone ? '已连' : '未连'
-    this.cameraLabel = camera ? '已连' : '未连'
-    this.batteryLabel = typeof state.battery === 'number' && state.battery >= 0 ? Math.floor(state.battery) + '%' : '—'
     this.batteryIcon = '/common/ui/battery-' + (typeof state.battery === 'number' && state.battery >= 0 ? (state.battery <= 20 ? 'low' : 'on') : 'off') + '.png'
     var gps = state.gpsState || 'off'
-    this.gpsIcon = '/common/ui/gps-' + (!state.gpsEnabled ? 'off' : gps === 'ready' ? 'on' : gps === 'denied' ? 'error' : 'wait') + '.png'
-    this.gpsLabel = !state.gpsEnabled ? 'GPS 关' : gps === 'ready' ? 'GPS' : gps === 'denied' ? '未授权' : '定位中'
+    this.gpsIcon = '/common/ui/gps-' + (!state.gpsEnabled ? 'off' : gps === 'ready' ? 'on' : gps === 'denied' || gps === 'provider_off' || gps === 'unavailable' ? 'error' : 'wait') + '.png'
     var seconds = typeof state.recordSeconds === 'number' && state.recordSeconds >= 0 ? Math.floor(state.recordSeconds) : 0
     this.timerText = !camera || phase === 'unknown' ? '--:--' : this.timeText(recording ? seconds : 0)
     this.timerClass = recording ? 'timer timer-recording' : 'timer'
-    this.ledClass = recording ? 'led led-recording' : camera ? 'led led-ready' : 'led led-off'
     if (this.stopEnabled) this.captureIcon = '/common/ui/capture-stop.png'
     else if (this.startEnabled) this.captureIcon = '/common/ui/capture-record.png'
     else this.captureIcon = '/common/ui/capture-' + (pending ? 'pending' : 'disabled') + '.png'
-    this.captureLabel = phase === 'stopping' ? '停止中' : phase === 'starting' ? '开始中' : recording ? '录像中' : this.startEnabled ? '待机' : !phone ? '手机未连接' : !camera ? '相机未连接' : pending ? '等待确认' : '等待状态'
   },
   timeText(seconds) {
     var minutes = Math.floor(seconds / 60)
@@ -117,27 +100,19 @@ export default {
 </script>
 
 <style>
-.page { width: 466px; height: 466px; background-color: #08090b; }
-.remote { width: 466px; height: 466px; }
-.heading { position: absolute; left: 145px; top: 36px; width: 190px; height: 30px; flex-direction: row; align-items: center; }
-.led { width: 8px; height: 8px; border-radius: 4px; margin-right: 12px; }
-.led-off { background-color: #657080; }
-.led-ready { background-color: #6ad9a4; }
-.led-recording { background-color: #ff4b50; }
-.model { width: 160px; height: 30px; font-size: 21px; color: #e9edf3; }
-.status-strip { position: absolute; left: 93px; top: 77px; width: 280px; height: 51px; flex-direction: row; }
-.status-item { width: 70px; height: 51px; flex-direction: column; align-items: center; }
-.status-icon { width: 28px; height: 28px; }
-.status-label { width: 70px; height: 23px; font-size: 15px; color: #a9b2bf; text-align: center; }
+.page { width: 466px; height: 466px; background-color: #000000; }
+.remote { width: 466px; height: 466px; background-color: #000000; }
+.status-strip { position: absolute; left: 73px; top: 48px; width: 320px; height: 51px; flex-direction: row; justify-content: center; }
+.status-item { width: 80px; height: 51px; align-items: center; justify-content: center; }
+.status-icon { width: 44px; height: 44px; }
 .timer { position: absolute; left: 98px; top: 135px; width: 270px; height: 45px; text-align: center; font-size: 39px; color: #f1f3f6; }
 .timer-recording { color: #ff6165; }
 .capture { position: absolute; left: 137px; top: 182px; width: 192px; height: 192px; align-items: center; justify-content: center; }
 .capture-image { width: 192px; height: 192px; }
-.capture-label { position: absolute; left: 108px; top: 373px; width: 250px; height: 27px; text-align: center; font-size: 19px; color: #e1e6ed; }
 .edge-tools { position: absolute; left: 151px; top: 402px; width: 164px; height: 50px; flex-direction: row; justify-content: space-between; }
 .edge-tool { width: 64px; height: 50px; border-radius: 25px; background-color: #1d2128; align-items: center; justify-content: center; }
 .tool-icon { width: 27px; height: 27px; }
-.tools { width: 466px; height: 466px; flex-direction: column; align-items: center; padding-top: 38px; }
+.tools { width: 466px; height: 466px; background-color: #000000; flex-direction: column; align-items: center; padding-top: 38px; }
 .tools-title { width: 270px; height: 46px; text-align: center; font-size: 27px; color: #f1f3f6; }
 .tools-row { width: 290px; height: 48px; flex-direction: row; align-items: center; }
 .row-icon { width: 27px; height: 27px; margin-right: 13px; }

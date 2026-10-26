@@ -31,7 +31,7 @@ public final class RelayHub {
     private final SecureRandom random=new SecureRandom();
     public boolean enabled,busy,gpsEnabled,autoReconnectEnabled;
     public String phase="disconnected",message="先开启手机中转",watchMessage="等待手表连接",selectedAddress="";
-    public String gpsState="off",rememberedCameraName="",rememberedCameraAddress="";
+    public String gpsState="off",gpsMessage="GPS推送未开启",rememberedCameraName="",rememberedCameraAddress="";
     public float gpsAccuracy=-1,gpsSpeed=-1;
     public int verificationCode;
     private String epoch=UUID.randomUUID().toString(),ticket="";
@@ -40,6 +40,7 @@ public final class RelayHub {
     private long statusSeq;
     private int gpsSequence;
     private final PhoneGps gps;
+    private final GpsLifecycle gpsLifecycle;
     public RelayHub(Context ctx) {
         context=ctx.getApplicationContext(); prefs=context.getSharedPreferences("relay",0);
         rememberedCameraAddress=prefs.getString("camera_address","");
@@ -99,8 +100,9 @@ public final class RelayHub {
         });
         gps=new PhoneGps(context,new PhoneGps.Listener(){
             public void onStateChanged(PhoneGps.State state){
-                gpsState=state.phase;gpsAccuracy=state.accuracyMeters;changed();
+                gpsState=state.phase;gpsMessage=state.message;gpsAccuracy=state.accuracyMeters;if(!state.ready)gpsSpeed=-1;changed();
             }
+            public void onDiagnostic(String detail){log("GPS："+detail);}
             public void onFix(GpsProtocol.Fix fix){
                 gpsSpeed=Math.max(0,Math.abs(fix.northMps)+Math.abs(fix.eastMps));
                 if(enabled&&session.isReady()&&!session.isBusy()&&ble.supportsGps()){
@@ -109,6 +111,10 @@ public final class RelayHub {
                 }
             }
         });
+        gpsLifecycle=new GpsLifecycle(new GpsLifecycle.Driver(){
+            public boolean start(){return gps.start();}
+            public void stop(){gps.stop();}
+        });
     }
     private final Runnable pulse=new Runnable(){public void run(){
         if(!enabled)return; session.tick(SystemClock.elapsedRealtime());
@@ -116,13 +122,13 @@ public final class RelayHub {
     }};
     public void start(){
         if(enabled)return; enabled=true;rotateEpoch();message="手机中转已开启，请搜索相机";
-        bridge.start(); if(gpsEnabled) gps.start(); main.post(pulse);
+        bridge.start(); gpsLifecycle.reconfigure(true,gpsEnabled); main.post(pulse);
         if(autoReconnectEnabled&&!rememberedCameraAddress.isEmpty())
             main.postDelayed(()->{if(enabled&&autoReconnectEnabled)reconnectRememberedCamera();},500);
         changed();
     }
     public void stop(){
-        enabled=false;main.removeCallbacks(pulse);gps.stop();ble.close();busy=false;message="手机中转已关闭";
+        enabled=false;main.removeCallbacks(pulse);gpsLifecycle.stop();ble.close();busy=false;message="手机中转已关闭";
         publish();bridge.stop();changed();
     }
     public void scan(){if(!enabled){log("请先开启手机中转");return;}candidates.clear();ble.scan();changed();}
@@ -135,7 +141,13 @@ public final class RelayHub {
     }
     public void reconnectRememberedCamera(){if(enabled&&!rememberedCameraAddress.isEmpty())ble.connect(rememberedCameraAddress);}
     public void setAutoReconnect(boolean enabled){autoReconnectEnabled=enabled;prefs.edit().putBoolean("auto_reconnect",enabled).apply();changed();}
-    public void setGpsEnabled(boolean enabled){gpsEnabled=enabled;prefs.edit().putBoolean("gps_enabled",enabled).apply();if(!enabled){gps.stop();gpsState="off";ble.clearGps();}changed();}
+    public void reconfigureGps(){
+        gpsLifecycle.reconfigure(enabled,gpsEnabled);
+        if(!gpsEnabled){gpsState="off";gpsMessage="GPS推送未开启";gpsAccuracy=-1;gpsSpeed=-1;ble.clearGps();}
+        changed();
+    }
+    public void setGpsEnabled(boolean enabled){gpsEnabled=enabled;prefs.edit().putBoolean("gps_enabled",enabled).apply();if(!enabled){gpsLifecycle.stop();gpsState="off";gpsMessage="GPS推送未开启";gpsAccuracy=-1;gpsSpeed=-1;ble.clearGps();}changed();}
+    public void setGpsStartError(String detail){gpsLifecycle.stop();ble.clearGps();gpsState="unavailable";gpsMessage=detail;gpsAccuracy=-1;gpsSpeed=-1;changed();}
     private int nextGpsSequence(){gpsSequence=(gpsSequence+1)&0xffff;if(gpsSequence==0)gpsSequence=1;return gpsSequence;}
     public void forgetCamera(){
         if(!selectedAddress.isEmpty())prefs.edit().remove("paired_"+selectedAddress).apply();
@@ -160,7 +172,7 @@ public final class RelayHub {
             "canControl",enabled&&session.canControlRecording(),"canStart",enabled&&session.canStartRecording(),
             "canStop",enabled&&session.canStopRecording(),"busy",session.isBusy(),"pendingDesired",pending==null?JSONObject.NULL:pending,
             "recordPhase",commandPhase,"watchConnected",bridge.isWatchConnected(),"gpsState",gpsState,"gpsEnabled",gpsEnabled,
-            "battery",fresh?s.batteryPercent:-1,"recordSeconds",fresh?s.recordingSeconds:-1,"message",detail,
+            "battery",fresh?s.batteryPercent:-1,"recordSeconds",fresh?s.recordingSeconds:-1,"gpsMessage",gpsMessage,"message",detail,
             "revision",session.getRevision());
     }
     private void publish(){if(session==null||bridge==null)return;newTicket();lastPublish=SystemClock.elapsedRealtime();sendWatch(snapshot());}

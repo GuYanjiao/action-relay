@@ -13,14 +13,17 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 import cn.local.actionrelay.protocol.GpsProtocol;
 
 /** GPS_PROVIDER only. Keeps the current fix and one preceding altitude in memory; writes no track. */
 @SuppressLint("MissingPermission")
 public final class PhoneGps {
+    private static final String TAG="ActionRelay.GPS";
     public interface Listener {
         void onStateChanged(State state);
         void onFix(GpsProtocol.Fix fix);
+        default void onDiagnostic(String message) {}
     }
     public static final class State {
         public final boolean enabled,ready;
@@ -48,6 +51,8 @@ public final class PhoneGps {
     private float previousVerticalAccuracy;
     private String previousAltitudeSource="",issuePhase="off",issueMessage="GPS推送未开启";
     private GpsProtocol.VerticalSpeed currentDown;
+    private boolean firstFixLogged;
+    private String lastDiagnostic="";
 
     public PhoneGps(Context context,Listener listener){
         this.context=context.getApplicationContext();this.listener=listener;
@@ -57,18 +62,26 @@ public final class PhoneGps {
     public boolean start(){
         if(running)return true;
         resetMeasurements();
+        firstFixLogged=false;
+        lastDiagnostic="";
         if(!hasPermission()){issue("permission","需要精确定位权限");notifyState();return false;}
         if(manager==null||!gpsEnabled()){issue("provider_off","请先打开手机定位和GPS");notifyState();return false;}
         running=true;startedElapsed=SystemClock.elapsedRealtime();issue("searching","正在等待真实GNSS定位，请到开阔处");
         try{
-            gnssRegistered=manager.registerGnssStatusCallback(context.getMainExecutor(),gnssCallback);
-            nmeaRegistered=manager.addNmeaListener(context.getMainExecutor(),nmeaListener);
+            try{gnssRegistered=manager.registerGnssStatusCallback(context.getMainExecutor(),gnssCallback);}
+            catch(SecurityException denied){throw denied;}
+            catch(RuntimeException optional){diagnostic("卫星监听不可用："+shortError(optional));}
+            try{nmeaRegistered=manager.addNmeaListener(context.getMainExecutor(),nmeaListener);}
+            catch(SecurityException denied){throw denied;}
+            catch(RuntimeException optional){diagnostic("NMEA监听不可用："+shortError(optional));}
+            diagnostic("附加测量订阅："+(gnssRegistered?"卫星状态成功":"卫星状态失败")+"，"+(nmeaRegistered?"NMEA成功":"NMEA失败"));
             android.location.LocationRequest request=new android.location.LocationRequest.Builder(1000)
                 .setMinUpdateIntervalMillis(1000).setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY).build();
             manager.requestLocationUpdates(LocationManager.GPS_PROVIDER,request,context.getMainExecutor(),locationListener);
+            diagnostic("GPS_PROVIDER位置订阅成功");
             main.post(pulse);notifyState();return true;
-        }catch(SecurityException denied){shutdown();issue("permission","定位权限或前台定位服务未就绪");notifyState();return false;}
-        catch(RuntimeException error){shutdown();issue("unavailable","无法启动手机GNSS："+shortError(error));notifyState();return false;}
+        }catch(SecurityException denied){diagnostic("GPS订阅被拒绝："+shortError(denied));shutdown();issue("permission","定位权限或前台定位服务未就绪");notifyState();return false;}
+        catch(RuntimeException error){diagnostic("GPS订阅异常："+shortError(error));shutdown();issue("unavailable","无法启动手机GNSS："+shortError(error));notifyState();return false;}
     }
     public void stop(){shutdown();issue("off","GPS推送未开启");notifyState();}
     private void shutdown(){
@@ -96,6 +109,7 @@ public final class PhoneGps {
             long elapsed=result.getElapsedRealtimeNanos()/1000000;
             if(elapsed<startedElapsed)return;
             if(location!=null&&elapsed<location.getElapsedRealtimeNanos()/1000000)return;
+            if(!firstFixLogged){firstFixLogged=true;diagnostic("收到首个真实GPS定位");}
             location=new Location(result);rebuild();
         }
         @Override public void onProviderDisabled(String provider){if(running&&LocationManager.GPS_PROVIDER.equals(provider)){
@@ -171,7 +185,8 @@ public final class PhoneGps {
             location.getAccuracy(),verticalAccuracy,Math.max(location.getSpeedAccuracyMetersPerSecond(),currentDown.accuracyMps),satellites);
         String invalid=GpsProtocol.invalidReason(candidate,now);
         if(invalid!=null){issue("waiting_quality",invalid);notifyState();return;}
-        fix=candidate;issue("ready","手机GNSS已定位");notifyState();
+        fix=candidate;
+        issue("ready","手机GNSS已定位");notifyState();
         if(candidate.elapsedMillis!=emittedElapsed){emittedElapsed=candidate.elapsedMillis;listener.onFix(candidate);}
     }
     public State getState(){
@@ -188,6 +203,12 @@ public final class PhoneGps {
     public GpsProtocol.Fix getFix(){return getState().ready?fix:null;}
     private void notifyState(){listener.onStateChanged(getState());}
     private void issue(String phase,String message){issuePhase=phase;issueMessage=message;}
+    private void diagnostic(String message){
+        if(message.equals(lastDiagnostic))return;
+        lastDiagnostic=message;
+        Log.i(TAG,message);
+        listener.onDiagnostic(message);
+    }
     private static boolean positive(double value){return GpsProtocol.finite(value)&&value>0;}
     private static String shortError(RuntimeException error){String text=error.getClass().getSimpleName();return text.length()>60?text.substring(0,60):text;}
 }

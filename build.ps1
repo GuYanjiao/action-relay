@@ -4,7 +4,7 @@ param(
   [string]$JdkBin,
   [string]$AiotCli,
   [switch]$SkipWatch,
-  [string]$VersionName = '0.3.0',
+  [string]$VersionName = '0.3.1',
   [string]$SigningStorePassword = $env:ACTION_RELAY_STORE_PASSWORD,
   [string]$SigningKeyPassword = $env:ACTION_RELAY_KEY_PASSWORD
 )
