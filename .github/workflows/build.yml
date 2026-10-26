@@ -3,6 +3,7 @@ name: Build packages
 on:
   workflow_dispatch:
   push:
+    branches: ['work/**']
     tags: ['v*']
 
 permissions:
