@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="cn.local.actionrelay" android:versionCode="9" android:versionName="0.4.0">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="cn.local.actionrelay" android:versionCode="10" android:versionName="0.4.1">
   <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="36" />
   <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -15,7 +15,7 @@
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
     <service android:name=".RelayService" android:exported="false" android:foregroundServiceType="connectedDevice|location" />
-    <service android:name=".RecordingTileService" android:label="Action 录像" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+    <service android:name=".RecordingTileService" android:label="Action 中转" android:icon="@drawable/ic_relay_tile" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
       <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
     </service>
   </application>

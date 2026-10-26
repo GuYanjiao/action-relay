@@ -73,6 +73,11 @@ export function createRelayController(options) {
       cameraReady: fresh && camera === 'ready',
       battery: status ? status.battery : -1,
       recordSeconds: status ? status.recordSeconds : -1,
+      storageMb: status && typeof status.storageMb === 'number' && isFinite(status.storageMb) &&
+        status.storageMb >= 0 && status.storageMb < 4294967295 ? status.storageMb : -1,
+      cameraMode: status ? status.cameraMode : -1,
+      videoResolution: status ? status.videoResolution : -1,
+      fpsIndex: status ? status.fpsIndex : -1,
       recordPhase: phase,
       gpsState: status ? status.gpsState : 'off',
       gpsEnabled: status ? status.gpsEnabled === true : false,

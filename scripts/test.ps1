@@ -16,6 +16,7 @@ try{
   $argFile=Join-Path $classes 'sources.args';[IO.File]::WriteAllText($argFile,(($files|ForEach-Object{'"'+$_.Replace('\','/')+'"'})-join "`n"),[Text.UTF8Encoding]::new($false))
   Checked 'javac' @('--release','8','-encoding','UTF-8','-d',$classes,('@'+$argFile))
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.DjiProtocolSelfTest','tests/connect_cmd_frame.txt')
+  Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.CameraTelemetryTest')
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.DjiSessionTransitionTest')
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.GpsProtocolTest')
   Checked 'java' @('-cp',$classes,'FrameQueueTest')
@@ -25,6 +26,8 @@ try{
  }
  if($Area -ne 'protocol'){
   Checked 'node' @('watch/tests/controller.test.mjs')
+  Checked 'node' @('watch/tests/hold.test.mjs')
+  Checked 'node' @('watch/tests/display.test.mjs')
   Checked 'node' @('watch/tests/compiled.test.mjs')
  }
 }finally{Pop-Location}

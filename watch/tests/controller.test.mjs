@@ -173,4 +173,11 @@ for(const invalid of [{session:'session-b'},{seq:1},{revision:8},{camera:'invali
   assert.equal(t.view().recording,true,'retired session cannot restore an old camera state');
   t.controller.destroy();checked++;
 }
+{
+  const t=setup();t.controller.show();t.status({storageMb:64000,cameraMode:1,videoResolution:16,fpsIndex:6});
+  assert.equal(t.view().storageMb,64000);assert.equal(t.view().videoResolution,16);
+  t.advance(6000);assert.equal(t.view().storageMb,-1);assert.equal(t.view().cameraMode,-1);
+  for(const storageMb of [null,'64000',-1,4294967295]){t.status({storageMb});assert.equal(t.view().storageMb,-1);}
+  t.controller.destroy();checked++;
+}
 console.log(`PASS: ${checked} controller integration scenarios; no camera command retries.`);

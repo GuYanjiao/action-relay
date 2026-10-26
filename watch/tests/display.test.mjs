@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const context=vm.createContext({});
+vm.runInContext(fs.readFileSync(new URL('../src/common/cameraDisplay.js',import.meta.url),'utf8').replace(/export function /g,'function '),context);
+assert.equal(context.storageLabel(0),'0 MB');assert.equal(context.storageLabel(999),'999 MB');
+assert.equal(context.storageLabel(64000),'64.0 GB');
+for(const value of [-1,null,undefined,NaN,Infinity,4294967295,'64000'])assert.equal(context.storageLabel(value),'—');
+assert.equal(context.videoLabel(1,16,6),'4K · 60');assert.equal(context.videoLabel(1,10,3),'1080P · 30');
+assert.equal(context.videoLabel(1,16,255),'4K · —');assert.equal(context.videoLabel(1,255,3),'—');
+assert.equal(context.videoLabel(0,16,6),'—','slow motion is not labeled using the normal-video FPS map');
+assert.equal(context.videoLabel(5,4,3),'—','photo burst count is not labeled as FPS');
+assert.equal(context.videoLabel(1,'16',6),'—');
+console.log('PASS: storage units, absent/invalid data, resolution/FPS mapping and mode semantics');

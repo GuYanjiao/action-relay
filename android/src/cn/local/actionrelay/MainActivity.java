@@ -19,6 +19,8 @@ import java.util.*;
 
 /** Native Android views, using the spacious cards and restrained color of HyperOS. */
 public final class MainActivity extends Activity implements RelayHub.UiListener {
+    public static final String START_RELAY_FROM_TILE="cn.local.actionrelay.START_RELAY_FROM_TILE";
+    private boolean pendingTileStart;
     private int BG,CARD,SURFACE,WHITE,MUTED,BLUE,GREEN,RED,AMBER;
     private RelayHub hub;
     private LinearLayout root,deviceRows;
@@ -32,6 +34,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
 
     @Override public void onCreate(Bundle savedState){
         super.onCreate(savedState);hub=((RelayApp)getApplication()).hub;
+        consumeStartupIntent(getIntent());
         boolean night=(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
         if(night){BG=0xff101114;CARD=0xff1c1e23;SURFACE=0xff252830;WHITE=0xfff2f4f7;MUTED=0xff9da6b5;BLUE=0xff86b7ff;GREEN=0xff6ad9a4;RED=0xffff555c;AMBER=0xffefb866;}
         else {BG=0xfff5f7fb;CARD=0xffffffff;SURFACE=0xffe9eef6;WHITE=0xff17202b;MUTED=0xff596574;BLUE=0xff2768c7;GREEN=0xff168a5b;RED=0xffc93642;AMBER=0xff9a6500;}
@@ -73,7 +76,9 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         render();
     }
 
-    @Override protected void onResume(){super.onResume();resumed=true;hub.addListener(this);hub.onEnvironmentChanged();if(pendingGpsReconfigure)reconfigureGps();render();}
+    @Override protected void onResume(){super.onResume();resumed=true;hub.addListener(this);hub.onEnvironmentChanged();if(pendingGpsReconfigure)reconfigureGps();render();if(pendingTileStart){pendingTileStart=false;if(!hub.enabled)requestStart();}}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);consumeStartupIntent(intent);if(resumed&&pendingTileStart){pendingTileStart=false;if(!hub.enabled)requestStart();}}
+    private void consumeStartupIntent(Intent intent){if(intent!=null&&START_RELAY_FROM_TILE.equals(intent.getAction())){pendingTileStart=true;intent.setAction(Intent.ACTION_MAIN);}}
     @Override protected void onPause(){resumed=false;hub.removeListener(this);super.onPause();}
     @Override protected void onDestroy(){if(panel!=null)panel.dismiss();super.onDestroy();}
     @Override public void onChanged(){runOnUiThread(this::render);}
@@ -111,8 +116,12 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         }
     }
     private void startRelay(){
-        if(!hub.ble.bluetoothEnabled()){startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));toast("打开蓝牙后，再点击电源键");return;}
+        if(!hub.ble.bluetoothEnabled()){startActivityForResult(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),14);toast("打开蓝牙后继续开启中转");return;}
         startForegroundService(new Intent(this,RelayService.class).setAction(RelayService.START));
+    }
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request==14&&result==RESULT_OK&&!hub.enabled)requestStart();
     }
     private void closeRelay(){new AlertDialog.Builder(this).setTitle("关闭手机中转？").setMessage("会断开遥控连接。相机若正在录像，会继续录像。").setPositiveButton("关闭中转",(d,w)->startService(new Intent(this,RelayService.class).setAction(RelayService.STOP))).setNegativeButton("取消",null).show();}
     private void authorizeWatch(){hub.bridge.openAuthorization(this);}
@@ -156,7 +165,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         LinearLayout content=sheet("工具");
         addAction(content,"key","手表通信授权",this::authorizeWatch);
         addAction(content,"info","保持手表连接",this::showKeepConnectedHelp);
-        addAction(content,"tile","添加快捷磁贴",()->RecordingTileService.requestAdd(this));
+        addAction(content,"tile","添加中转磁贴",()->RecordingTileService.requestAdd(this));
         LinearLayout auto=row();auto.setMinimumHeight(dp(72));auto.setGravity(Gravity.CENTER_VERTICAL);auto.setPadding(dp(16),0,dp(10),0);auto.setBackground(round(SURFACE,22));
         LinearLayout words=column();addText(words,"自动重连",17,WHITE,true);addText(words,"仅重连相机，不自动录像",12,MUTED,false);auto.addView(words,new LinearLayout.LayoutParams(0,-2,1));
         autoSwitch=new Switch(this);autoSwitch.setContentDescription("自动重连已记住的相机");auto.addView(autoSwitch,new LinearLayout.LayoutParams(dp(72),dp(64)));content.addView(auto,spaced(-1,dp(76),0,8));
@@ -165,7 +174,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         addAction(content,"log","连接记录",this::showLogsPanel);
         addAction(content,"refresh","重新配对相机",()->new AlertDialog.Builder(this).setTitle("重新配对相机？").setMessage("清除本应用保存的配对授权并断开连接。之后需重新搜索相机。").setPositiveButton("重新配对",(d,w)->hub.forgetCamera()).setNegativeButton("取消",null).show());
         addAction(content,"info","使用提示",()->new AlertDialog.Builder(this).setTitle("使用提示").setMessage("相机请设为普通视频模式。首次连接需在相机确认验证码。\n\n锁屏使用前，允许本应用和小米运动健康后台运行，并按系统提供的选项设置为不限制省电。\n\n自动重连不会自动录像。状态未确认时，主键会暂停使用。").setPositiveButton("知道了",null).show());
-        gap(content,8);addText(content,"Action 中转 · 0.4.0",12,MUTED,false);showSheet();render();
+        gap(content,8);addText(content,"Action 中转 · 0.4.1",12,MUTED,false);showSheet();render();
     }
     private void showLogsPanel(){LinearLayout content=sheet("连接记录");logsView=addText(content,"",12,MUTED,false);logsView.setTypeface(Typeface.MONOSPACE);logsView.setTextIsSelectable(true);showSheet();render();}
     private void openAppSettings(){startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}

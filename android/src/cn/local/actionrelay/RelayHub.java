@@ -283,6 +283,8 @@ public final class RelayHub {
             "canStop",enabled&&session.canStopRecording(),"busy",session.isBusy(),"pendingDesired",pending==null?JSONObject.NULL:pending,
             "recordPhase",commandPhase,"watchConnected",bridge.isWatchConnected(),"gpsState",gpsState,"gpsEnabled",gpsEnabled,
             "battery",fresh?s.batteryPercent:-1,"recordSeconds",fresh?s.recordingSeconds:-1,"gpsMessage",gpsMessage,"message",detail,
+            "storageMb",fresh?s.remainingCapacityMb:-1,"cameraMode",fresh?s.mode:-1,
+            "videoResolution",fresh?s.videoResolution:-1,"fpsIndex",fresh?s.fpsIndex:-1,
             "revision",session.getRevision());
     }
     private String controlKey(){

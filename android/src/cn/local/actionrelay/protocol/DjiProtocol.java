@@ -185,10 +185,15 @@ public final class DjiProtocol {
     public static final class CameraStatus {
         public final int mode, cameraState, recordingSeconds, batteryPercent, temperatureState;
         public final int powerMode, nextMode;
+        public final int videoResolution, fpsIndex;
+        public final long remainingCapacityMb;
         public final long receivedAtMs;
         CameraStatus(byte[] payload, long nowMs) {
             mode = u8(payload[0]); cameraState = u8(payload[1]);
             recordingSeconds = u16(payload, 5);
+            videoResolution = u8(payload[2]); fpsIndex = u8(payload[3]);
+            long capacity = payload.length >= 19 ? u32(payload,15) : -1;
+            remainingCapacityMb = capacity == 0xffffffffL ? -1 : capacity;
             powerMode = payload.length > 28 ? u8(payload[28]) : -1;
             nextMode = payload.length > 29 ? u8(payload[29]) : -1;
             temperatureState = payload.length > 30 ? u8(payload[30]) : -1;

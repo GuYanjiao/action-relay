@@ -2,7 +2,7 @@
 
 Action Relay 是一个 Android 手机中转应用和 Xiaomi Vela 手表端应用：用
 Xiaomi Watch S4 控制 DJI Osmo Action 4 开始或停止录像，并由手机采集真实
-GNSS 数据后发送给相机。当前版本为 **0.4.0（versionCode 9）**。
+GNSS 数据后发送给相机。当前版本为 **0.4.1（versionCode 10）**。
 
 ## 工作方式
 
@@ -25,7 +25,9 @@ DJI Osmo Action 4
 - 手表端提供大号图形化录制控制、计时、相机/手机连接状态和 GPS 状态。
 - 手表端支持可关闭的录制反馈：开始录像短振，按下停止键进入长按时立即长振。
 - 手机端提供相机搜索、配对、有限重连、状态显示和系统明暗主题适配。
-- 手机快捷设置磁贴可作为控制入口；具体锁屏和持续刷新行为仍需真机验证。
+- 手机快捷设置磁贴用于一键开启中转，不控制录像；已开启时重复点击不关闭中转。
+- 停止长按采用原生连续进度环：提前松手回落，发出停止请求后松手立即隐藏。
+- 手表约 10 点钟方向显示 SD 剩余空间；底部显示相机回传的分辨率/帧率，刷新与设置分列两侧。拍摄规格目前只读，需在相机修改。
 - GPS 使用手机真实 GNSS，区分权限不足、定位关闭、等待首次定位、测量不
   完整、数据过期和启动失败，不伪造缺失字段。
 - 目前面向国行 Xiaomi Watch S4（3.201.79）与 DJI Osmo Action 4；手机需
@@ -67,3 +69,5 @@ Watch S4 可用的声音播放接口，因此 0.4.0 只实现官方支持的振�
 - [GitHub Actions 工作流](.github/workflows)
 - [Copilot 工作流](docs/copilot-workflow.md)
 - [第三方说明](THIRD_PARTY_NOTICES.txt)
+
+手表系统小组件的公开接入限制见[可行性核对](docs/watch-widget-assessment.md)，相机可扩展信息见[大疆协议核对](docs/dji-watch-telemetry.md)。

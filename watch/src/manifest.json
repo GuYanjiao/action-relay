@@ -1,18 +1,38 @@
 {
   "package": "cn.local.actionrelay",
   "name": "Action遥控",
-  "versionName": "0.4.0",
-  "versionCode": 9,
+  "versionName": "0.4.1",
+  "versionCode": 10,
   "minAPILevel": 1,
   "minPlatformVersion": 1200,
   "icon": "/common/logo.png",
-  "deviceTypeList": ["watch"],
-  "features": [
-    {"name": "system.interconnect"},
-    {"name": "system.storage"},
-    {"name": "system.vibrator"}
+  "deviceTypeList": [
+    "watch"
   ],
-  "config": {"logLevel": "error", "designWidth": 466},
-  "router": {"entry": "pages/index", "pages": {"pages/index": {"component": "index"}}},
-  "display": {"backgroundColor": "#000000"}
+  "features": [
+    {
+      "name": "system.interconnect"
+    },
+    {
+      "name": "system.storage"
+    },
+    {
+      "name": "system.vibrator"
+    }
+  ],
+  "config": {
+    "logLevel": "error",
+    "designWidth": 466
+  },
+  "router": {
+    "entry": "pages/index",
+    "pages": {
+      "pages/index": {
+        "component": "index"
+      }
+    }
+  },
+  "display": {
+    "backgroundColor": "#000000"
+  }
 }

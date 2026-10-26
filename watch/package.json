@@ -1,10 +1,10 @@
 {
   "name": "action-relay-watch",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "scripts": {
     "build": "aiot build",
-    "test": "node tests/controller.test.mjs",
+    "test": "node tests/controller.test.mjs && node tests/hold.test.mjs && node tests/display.test.mjs",
     "test:compiled": "node tests/compiled.test.mjs"
   },
   "devDependencies": {

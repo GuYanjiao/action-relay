@@ -10,6 +10,8 @@ const sent=[];
 const vibrations=[];
 let feedbackValue='1';
 let timerId=0;
+let time=1000;
+const ClockDate=class extends Date { static now(){return time;} };
 const timers=new Map();
 const connect={send:opts=>{sent.push(opts.data);opts.success();},getReadyState:opts=>opts.success({status:1})};
 const native=name=>{
@@ -21,11 +23,12 @@ const native=name=>{
   if(name==='@system.vibrator'||name==='@app-module/system.vibrator') return {vibrate:opts=>vibrations.push(opts.mode)};
   assert.fail(`unexpected native module: ${name}`);
 };
-const global={$app_require$:native,setTimeout:fn=>{timers.set(++timerId,fn);return timerId;},clearTimeout:id=>timers.delete(id)};
-const context=vm.createContext({$app_require$:native,aiot:{
+const global={$app_require$:native,setTimeout:(fn,ms)=>{timers.set(++timerId,{fn,at:time+ms});return timerId;},clearTimeout:id=>timers.delete(id)};
+function advance(ms){const end=time+ms;for(;;){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;time=due[1].at;timers.delete(due[0]);due[1].fn();}time=end;}
+const context=vm.createContext({Date:ClockDate,$app_require$:native,aiot:{
   __ce__:(tag,data,children)=>{
     const opts={...data.__opts__};
-    for(const field of ['src','value','classList'])if(typeof opts[field]==='function')opts[field]=opts[field].call(data.__vm__);
+    for(const field of ['src','value','classList','percent'])if(typeof opts[field]==='function')opts[field]=opts[field].call(data.__vm__);
     return {tag,opts,children:children.flat(Infinity).filter(Boolean)};
   },
   __ci__:(data,render)=>data.__opts__.shown.call(data.__vm__)?render():[]
@@ -56,23 +59,30 @@ assert.equal(command.session,'s');assert.equal(command.ticket,'t');
 assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,false);
 connect.onmessage({data:JSON.stringify({v:1,type:'result',id:command.id,ok:true,phase:'confirmed'})});
 assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,false);
-connect.onmessage({data:JSON.stringify({v:1,type:'status',camera:'ready',recording:true,canControl:true,canStart:false,canStop:true,busy:false,session:'s',seq:2,revision:2,ticket:'t2'})});
+connect.onmessage({data:JSON.stringify({v:1,type:'status',camera:'ready',recording:true,canControl:true,canStart:false,canStop:true,busy:false,session:'s',seq:2,revision:2,ticket:'t2',storageMb:64000,cameraMode:1,videoResolution:16,fpsIndex:6})});
 assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,true);
 assert.equal(page.captureIcon,'/common/ui/capture-stop.png');
+assert.equal(page.storageText,'64.0 GB');assert.equal(page.videoFormatText,'4K · 60');
 capture.opts.events.touchstart({});
 assert.equal(sent.filter(x=>x.type==='command'&&x.action==='stop').length,0);
 assert.equal(page.pressRingVisible,true);
 assert.deepEqual(vibrations,['short','long']);
-assert.match(page.pressProgressIcon,/press-0\.png$/);
-const stopTimerId=[...timers.keys()].at(-1);const stopTimer=timers.get(stopTimerId);assert.equal(typeof stopTimer,'function');timers.delete(stopTimerId);stopTimer();
+assert.equal(page.pressProgress,0);
+advance(200);const partial=page.pressProgress;assert.ok(partial>0&&partial<100);
+const partialDom=page.template(page);const ring=byClass(partialDom,'capture-progress');assert.equal(ring.tag,'progress');assert.equal(ring.opts.percent,partial);
+capture.opts.events.touchend({});advance(32);assert.ok(page.pressProgress<partial);advance(180);
+assert.equal(page.pressRingVisible,false);assert.equal(sent.filter(x=>x.type==='command'&&x.action==='stop').length,0);
+capture.opts.events.touchstart({});advance(650);
 assert.equal(sent.filter(x=>x.type==='command'&&x.action==='stop').length,1);
-assert.deepEqual(vibrations,['short','long']);
+assert.deepEqual(vibrations,['short','long','long']);
 assert.equal(page.pressProgress,100);
+capture.opts.events.touchend({});assert.equal(page.pressRingVisible,false);assert.equal(page.pressProgress,0);
 page.applyState({phoneConnected:true,cameraReady:true,gpsEnabled:true,gpsState:'provider_off',recordPhase:'idle',canStart:true,canStop:false});
 assert.equal(page.gpsIcon,'/common/ui/gps-error.png');
 page.applyState({phoneConnected:true,cameraReady:true,gpsEnabled:true,gpsState:'ready',recordPhase:'idle',canStart:true,canStop:false});
 assert.equal(page.gpsIcon,'/common/ui/gps-on.png');
 page.onHide();assert.equal(timers.size,0);
+assert.equal(page.storageText,'—');assert.equal(page.videoFormatText,'—');
 page.onShow();assert.equal(page.startEnabled,false);assert.equal(page.stopEnabled,false);
 page.onDestroy();assert.equal(timers.size,0);assert.equal(connect.onmessage,null);
-console.log('PASS: compiled page wiring, independent controls, ticket forwarding, freshness on resume.');
+console.log('PASS: compiled page wiring, native arc, early release vs committed stop, vibration, freshness and cleanup.');
