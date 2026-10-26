@@ -21,3 +21,13 @@ export function videoLabel(mode, resolution, fpsIndex) {
   if (!Object.prototype.hasOwnProperty.call(sizes, resolution)) return '—';
   return sizes[resolution] + ' · ' + (Object.prototype.hasOwnProperty.call(rates, fpsIndex) ? rates[fpsIndex] : '—');
 }
+
+// DJI temp_over is an overheat state, never a Celsius measurement.
+export function temperatureLabel(value) {
+  return typeof value === 'number' && Math.floor(value) === value && value >= 0 && value <= 3 ?
+    ['正常', '偏高', '过热禁录', '即将关机'][value] : '—';
+}
+export function temperatureIcon(value) {
+  return '/common/ui/temperature-' + (typeof value === 'number' && Math.floor(value) === value && value >= 0 && value <= 3 ?
+    (value === 0 ? 'normal' : value === 1 ? 'warm' : 'hot') : 'off') + '.png';
+}

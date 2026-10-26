@@ -17,3 +17,13 @@ assert.equal(context.videoLabel(0,16,6),'—','slow motion is not labeled using 
 assert.equal(context.videoLabel(5,4,3),'—','photo burst count is not labeled as FPS');
 assert.equal(context.videoLabel(1,'16',6),'—');
 console.log('PASS: storage units, absent/invalid data, resolution/FPS mapping and mode semantics');
+
+for (const [value,label,icon] of [[0,'正常','normal'],[1,'偏高','warm'],[2,'过热禁录','hot'],[3,'即将关机','hot']]) {
+  assert.equal(context.temperatureLabel(value),label);
+  assert.equal(context.temperatureIcon(value),'/common/ui/temperature-'+icon+'.png');
+}
+for (const value of [-1,4,255,null,undefined,'0',NaN,Infinity,0.5]) {
+  assert.equal(context.temperatureLabel(value),'—');
+  assert.equal(context.temperatureIcon(value),'/common/ui/temperature-off.png');
+}
+console.log('PASS: camera thermal states and unknown data never become Celsius values');

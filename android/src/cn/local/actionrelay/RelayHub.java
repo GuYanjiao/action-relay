@@ -285,6 +285,7 @@ public final class RelayHub {
             "battery",fresh?s.batteryPercent:-1,"recordSeconds",fresh?s.recordingSeconds:-1,"gpsMessage",gpsMessage,"message",detail,
             "storageMb",fresh?s.remainingCapacityMb:-1,"cameraMode",fresh?s.mode:-1,
             "remainingSeconds",fresh?s.remainingRecordSeconds:-1,
+            "temperatureState",fresh?s.temperatureState:-1,
             "videoResolution",fresh?s.videoResolution:-1,"fpsIndex",fresh?s.fpsIndex:-1,
             "revision",session.getRevision());
     }

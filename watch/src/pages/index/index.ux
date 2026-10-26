@@ -7,7 +7,8 @@
         <div class="status-item status-gps" onclick="openTools"><image class="status-icon" src="{{gpsIcon}}"></image></div>
         <div class="status-item status-battery" onclick="openTools"><image class="status-icon" src="{{batteryIcon}}"></image></div>
       </div>
-      <div class="storage-badge"><image class="storage-icon" src="/common/ui/sd-card.png"></image><text class="storage-value">{{remainingText}}</text></div>
+      <div class="storage-badge"><image class="status-icon" src="/common/ui/sd-card.png"></image><text class="storage-value">{{remainingText}}</text></div>
+      <div class="temperature-badge"><image class="status-icon" src="{{temperatureIcon}}"></image><text class="temperature-value">{{temperatureText}}</text></div>
       <div class="{{captureClass}}" ontouchstart="startCapturePress" ontouchend="endCapturePress" ontouchcancel="endCapturePress">
         <image class="{{captureImageClass}}" src="{{captureIcon}}"></image>
         <progress if="{{pressRingVisible}}" class="capture-progress" type="arc" percent="{{pressProgress}}"></progress>
@@ -30,7 +31,7 @@
 <script>
 import { createRelayController } from '../../common/relayController.js'
 import { createHoldProgress } from '../../common/holdProgress.js'
-import { remainingLabel, videoLabel } from '../../common/cameraDisplay.js'
+import { remainingLabel, videoLabel, temperatureLabel, temperatureIcon } from '../../common/cameraDisplay.js'
 
 export default {
   private: {
@@ -45,6 +46,8 @@ export default {
     timerText: '--:--',
     timerClass: 'timer',
     remainingText: '—',
+    temperatureText: '—',
+    temperatureIcon: '/common/ui/temperature-off.png',
     videoFormatText: '—',
     captureIcon: '/common/ui/refresh.png',
     captureClass: 'capture capture-reconnect',
@@ -88,6 +91,8 @@ export default {
     this.startEnabled = state.startEnabled === true
     this.stopEnabled = state.stopEnabled === true
     this.remainingText = remainingLabel(state.remainingSeconds)
+    this.temperatureText = temperatureLabel(state.temperatureState)
+    this.temperatureIcon = temperatureIcon(state.temperatureState)
     this.videoFormatText = videoLabel(state.cameraMode, state.videoResolution, state.fpsIndex)
     var phone = state.phoneConnected === true
     var camera = state.cameraReady === true
@@ -173,9 +178,10 @@ export default {
 .capture-refresh { width: 96px; height: 96px; }
 .capture-progress { position: absolute; left: 0px; top: 0px; width: 224px; height: 224px; color: #ff304d; layer-color: #272b33; stroke-width: 12px; start-angle: 0deg; total-angle: 360deg; center-x: 112px; center-y: 112px; radius: 104px; }
 .format-summary { position: absolute; left: 133px; top: 390px; width: 200px; height: 32px; text-align: center; font-size: 20px; color: #cbd3df; }
-.storage-badge { position: absolute; left: 43px; top: 151px; width: 100px; height: 53px; flex-direction: column; align-items: center; justify-content: center; }
-.storage-icon { width: 28px; height: 28px; }
-.storage-value { width: 100px; height: 25px; text-align: center; font-size: 15px; color: #f1f3f6; }
+.storage-badge { position: absolute; left: 14px; top: 211px; width: 104px; height: 69px; flex-direction: column; align-items: center; justify-content: center; }
+.temperature-badge { position: absolute; left: 348px; top: 211px; width: 104px; height: 69px; flex-direction: column; align-items: center; justify-content: center; }
+.temperature-value { width: 104px; height: 25px; text-align: center; font-size: 17px; color: #f1f3f6; }
+.storage-value { width: 104px; height: 25px; text-align: center; font-size: 15px; color: #f1f3f6; }
 .tools { width: 466px; height: 466px; background-color: #000000; flex-direction: column; align-items: center; padding-top: 38px; }
 .tools-title { width: 270px; height: 46px; text-align: center; font-size: 27px; color: #f1f3f6; }
 .tools-row { width: 290px; height: 48px; flex-direction: row; align-items: center; }

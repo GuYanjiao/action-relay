@@ -78,6 +78,8 @@ export function createRelayController(options) {
       cameraMode: status ? status.cameraMode : -1,
       remainingSeconds: status && typeof status.remainingSeconds === 'number' && isFinite(status.remainingSeconds) &&
         status.remainingSeconds >= 0 && status.remainingSeconds < 4294967295 && Math.floor(status.remainingSeconds) === status.remainingSeconds ? status.remainingSeconds : -1,
+      temperatureState: status && typeof status.temperatureState === 'number' &&
+        status.temperatureState >= 0 && status.temperatureState <= 3 && Math.floor(status.temperatureState) === status.temperatureState ? status.temperatureState : -1,
       videoResolution: status ? status.videoResolution : -1,
       fpsIndex: status ? status.fpsIndex : -1,
       recordPhase: phase,

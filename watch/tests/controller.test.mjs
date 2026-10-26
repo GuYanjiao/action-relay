@@ -174,9 +174,11 @@ for(const invalid of [{session:'session-b'},{seq:1},{revision:8},{camera:'invali
   t.controller.destroy();checked++;
 }
 {
-  const t=setup();t.controller.show();t.status({storageMb:64000,remainingSeconds:3723,cameraMode:1,videoResolution:16,fpsIndex:6});
-  assert.equal(t.view().storageMb,64000);assert.equal(t.view().remainingSeconds,3723);assert.equal(t.view().videoResolution,16);
-  t.advance(6000);assert.equal(t.view().storageMb,-1);assert.equal(t.view().remainingSeconds,-1);assert.equal(t.view().cameraMode,-1);
+  const t=setup();t.controller.show();t.status({storageMb:64000,remainingSeconds:3723,temperatureState:1,cameraMode:1,videoResolution:16,fpsIndex:6});
+  assert.equal(t.view().temperatureState,1);assert.equal(t.view().storageMb,64000);assert.equal(t.view().remainingSeconds,3723);assert.equal(t.view().videoResolution,16);
+  t.advance(6000);assert.equal(t.view().temperatureState,-1);assert.equal(t.view().storageMb,-1);assert.equal(t.view().remainingSeconds,-1);assert.equal(t.view().cameraMode,-1);
+  for(const temperatureState of [0,1,2,3]){t.status({temperatureState});assert.equal(t.view().temperatureState,temperatureState);}
+  for(const temperatureState of [null,'0',-1,4,255,1.5]){t.status({temperatureState});assert.equal(t.view().temperatureState,-1);}
   for(const storageMb of [null,'64000',-1,4294967295]){t.status({storageMb});assert.equal(t.view().storageMb,-1);}
   t.controller.destroy();checked++;
 }

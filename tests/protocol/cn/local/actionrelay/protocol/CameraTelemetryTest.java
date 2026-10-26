@@ -26,6 +26,13 @@ public final class CameraTelemetryTest {
         for(int i=23;i<27;i++)packet[i]=0;
         check(parse(packet).remainingRecordSeconds==0,"reported zero is distinct from missing time");
         for(int length=7;length<27;length++)check(parse(new byte[length]).remainingRecordSeconds==-1,"partial remaining-time field is absent");
+        check(parse(new byte[30]).temperatureState==-1,"short packet has unknown thermal state");
+        for(int state=0;state<=3;state++){
+            packet[30]=(byte)state;
+            check(parse(packet).temperatureState==state,"thermal state is read at offset 30, not Celsius");
+        }
+        packet[30]=(byte)255;
+        check(parse(packet).temperatureState==255,"unrecognized thermal code remains distinguishable for consumers");
         System.out.println("PASS: "+checks+" camera telemetry decoding checks");
     }
 }

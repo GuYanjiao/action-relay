@@ -174,7 +174,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         addAction(content,"log","连接记录",this::showLogsPanel);
         addAction(content,"refresh","重新配对相机",()->new AlertDialog.Builder(this).setTitle("重新配对相机？").setMessage("清除本应用保存的配对授权并断开连接。之后需重新搜索相机。").setPositiveButton("重新配对",(d,w)->hub.forgetCamera()).setNegativeButton("取消",null).show());
         addAction(content,"info","使用提示",()->new AlertDialog.Builder(this).setTitle("使用提示").setMessage("相机请设为普通视频模式。首次连接需在相机确认验证码。\n\n锁屏使用前，允许本应用和小米运动健康后台运行，并按系统提供的选项设置为不限制省电。\n\n自动重连不会自动录像。状态未确认时，主键会暂停使用。").setPositiveButton("知道了",null).show());
-        gap(content,8);addText(content,"Action 中转 · 0.4.2",12,MUTED,false);showSheet();render();
+        gap(content,8);addText(content,"Action 中转 · 0.4.3",12,MUTED,false);showSheet();render();
     }
     private void showLogsPanel(){LinearLayout content=sheet("连接记录");logsView=addText(content,"",12,MUTED,false);logsView.setTypeface(Typeface.MONOSPACE);logsView.setTextIsSelectable(true);showSheet();render();}
     private void openAppSettings(){startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}
