@@ -1,3 +1,3 @@
-Use [AGENTS.md](../AGENTS.md) as the shared project requirements. For the active delegated task read [COPILOT_HANDOFF.md](../COPILOT_HANDOFF.md).
+Use [AGENTS.md](../AGENTS.md) as the shared project requirements. Read the latest applicable file in docs/copilot-checklists/; COPILOT_HANDOFF.md is historical.
 
-This is native Java Android plus Xiaomi Vela UX/JavaScript, built on Windows. Focus on the requested watch-first change and existing working relay. Keep APK/RPK signing identities matched and secrets ignored. State exact test evidence and hardware limitations; do not claim the unintegrated v0.3 branch is a working release.
+This is native Java Android plus Xiaomi Vela UX/JavaScript. Work locally on source and static checks only. Do not invoke Java/Android/Vela compilers or local package builds. GitHub Actions runs the builds and regression suites with the fixed release signer stored in Actions Secrets. Do not read local private signing material. Keep Git commits signed with the configured OpenPGP key, and report cloud checks separately from hardware validation.

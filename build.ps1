@@ -4,14 +4,25 @@ param(
   [string]$JdkBin,
   [string]$AiotCli,
   [switch]$SkipWatch,
-  [string]$VersionName = '0.3.1',
-  [string]$SigningStorePassword = $env:ACTION_RELAY_STORE_PASSWORD,
-  [string]$SigningKeyPassword = $env:ACTION_RELAY_KEY_PASSWORD
+  [string]$VersionName,
+  [string]$SigningKeystore = $env:ACTION_RELAY_KEYSTORE,
+  [string]$SigningAlias
 )
 $ErrorActionPreference='Stop'
 $projectRoot=$PSScriptRoot
-if (-not $SigningStorePassword) { $SigningStorePassword = 'android' }
-if (-not $SigningKeyPassword) { $SigningKeyPassword = $SigningStorePassword }
+if($env:GITHUB_ACTIONS -ne 'true'){throw 'Package compilation is cloud-only. Push changes and use GitHub Actions.'}
+$watchManifest=Get-Content -Raw (Join-Path $projectRoot 'watch/src/manifest.json')|ConvertFrom-Json
+[xml]$androidManifest=Get-Content -Raw (Join-Path $projectRoot 'android/AndroidManifest.xml')
+$androidNamespace='http://schemas.android.com/apk/res/android'
+if(-not $VersionName){$VersionName=$watchManifest.versionName}
+if($VersionName -ne $watchManifest.versionName -or $VersionName -ne $androidManifest.manifest.GetAttribute('versionName',$androidNamespace) -or [int]$watchManifest.versionCode -ne [int]$androidManifest.manifest.GetAttribute('versionCode',$androidNamespace)){throw 'Android/Watch versions must match.'}
+$signing=Get-Content -Raw (Join-Path $projectRoot 'signing/release-signing.json')|ConvertFrom-Json
+if(-not $SigningAlias){$SigningAlias=$signing.alias}
+if($SigningAlias -ne $signing.alias){throw 'Signing alias must match the fixed release configuration.'}
+if (-not $SigningKeystore) { throw 'ACTION_RELAY_KEYSTORE is required; refusing to generate or use a fallback keystore.' }
+if (-not (Test-Path -LiteralPath $SigningKeystore)) { throw "Signing keystore not found: $SigningKeystore" }
+if (-not $env:ACTION_RELAY_STORE_PASSWORD) { throw 'ACTION_RELAY_STORE_PASSWORD is required.' }
+if (-not $env:ACTION_RELAY_KEY_PASSWORD) { throw 'ACTION_RELAY_KEY_PASSWORD is required.' }
 if(-not $JdkBin){$JdkBin=Join-Path $env:JAVA_HOME 'bin'}
 if(-not (Test-Path -LiteralPath (Join-Path $AndroidPlatform 'android.jar'))){throw 'Pass -AndroidPlatform with android.jar (API 36).'}
 if(-not (Test-Path -LiteralPath (Join-Path $BuildTools 'aapt2.exe'))){throw 'Pass -BuildTools with Android SDK build tools 36.0.0.'}
@@ -19,13 +30,9 @@ function Run-Checked([string]$program,[string[]]$arguments){& $program @argument
 $build=Join-Path $projectRoot 'android\build'
 $sign=Join-Path $projectRoot '.signing'
 New-Item -ItemType Directory -Force -Path $build,"$build\classes","$build\generated","$build\dex",$sign | Out-Null
-$keystore=Join-Path $sign 'actionrelay.p12'
-if(-not (Test-Path -LiteralPath $keystore)){
-  Run-Checked "$JdkBin\keytool.exe" @('-genkeypair','-alias','actionrelay','-keyalg','RSA','-keysize','2048','-validity','3650','-sigalg','SHA256withRSA','-dname','CN=Action Relay Personal Test','-storetype','PKCS12','-keystore',$keystore,'-storepass',$SigningStorePassword,'-keypass',$SigningKeyPassword,'-noprompt')
-}
 Run-Checked "$JdkBin\javac.exe" @('-encoding','UTF-8','-d',$sign,(Join-Path $projectRoot 'ExportSigning.java'))
 $watchSign=Join-Path $projectRoot 'watch\sign\debug'
-Run-Checked "$JdkBin\java.exe" @('-cp',$sign,'ExportSigning',$keystore,$SigningStorePassword,$watchSign)
+Run-Checked "$JdkBin\java.exe" @('-cp',$sign,'ExportSigning',$SigningKeystore,$SigningAlias,$watchSign,$signing.certificateSha256)
 $androidJar=Join-Path $AndroidPlatform 'android.jar'
 $resources=Join-Path $build 'resources.zip'
 Run-Checked "$BuildTools\aapt2.exe" @('compile','--dir',(Join-Path $projectRoot 'android\res'),'-o',$resources)
@@ -47,7 +54,7 @@ $archive=[System.IO.Compression.ZipFile]::Open("$build\unsigned.apk",[System.IO.
 try{Get-ChildItem -LiteralPath "$build\dex" -Filter '*.dex' -File|ForEach-Object {[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$_.FullName,$_.Name,[System.IO.Compression.CompressionLevel]::Optimal)|Out-Null}}finally{$archive.Dispose()}
 Run-Checked "$BuildTools\zipalign.exe" @('-f','4',"$build\unsigned.apk","$build\aligned.apk")
 $apk=Join-Path $build ("ActionRelay-$VersionName.apk")
-Run-Checked "$JdkBin\java.exe" @('-jar',"$BuildTools\lib\apksigner.jar",'sign','--ks',$keystore,'--ks-key-alias','actionrelay','--ks-pass',"pass:$SigningStorePassword",'--key-pass',"pass:$SigningKeyPassword",'--out',$apk,"$build\aligned.apk")
+Run-Checked "$JdkBin\java.exe" @('-jar',"$BuildTools\lib\apksigner.jar",'sign','--ks',$SigningKeystore,'--ks-key-alias',$SigningAlias,'--ks-pass','env:ACTION_RELAY_STORE_PASSWORD','--key-pass','env:ACTION_RELAY_KEY_PASSWORD','--out',$apk,"$build\aligned.apk")
 Run-Checked "$JdkBin\java.exe" @('-jar',"$BuildTools\lib\apksigner.jar",'verify','--verbose','--print-certs',$apk)
 if(-not $SkipWatch){
   if(-not (Test-Path -LiteralPath $AiotCli)){throw 'Pass -AiotCli (aiot-toolkit lib/bin.js) for the watch build.'}

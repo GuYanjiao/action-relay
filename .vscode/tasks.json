@@ -1,7 +1,6 @@
 {
   "version":"2.0.0",
   "tasks":[
-    {"label":"Action Relay: tests","type":"process","command":"powershell.exe","args":["-NoProfile","-ExecutionPolicy","Bypass","-File","${workspaceFolder}/scripts/test.ps1"],"group":{"kind":"test","isDefault":true},"problemMatcher":[]},
-    {"label":"Action Relay: build pair","type":"process","command":"powershell.exe","args":["-NoProfile","-ExecutionPolicy","Bypass","-File","${workspaceFolder}/scripts/build-local.ps1"],"group":{"kind":"build","isDefault":true},"problemMatcher":[]}
+    {"label":"Action Relay: open cloud workflow","type":"process","command":"cmd.exe","args":["/c","start","","https://github.com/GuYanjiao/action-relay/actions/workflows/build.yml"],"group":{"kind":"build","isDefault":true},"problemMatcher":[]}
   ]
 }

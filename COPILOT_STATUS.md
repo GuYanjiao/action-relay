@@ -79,3 +79,12 @@
 2. 云端 artifact：`action-relay-0.3.0-95a11f5611061d70fda23f82291809be2910c400`，SHA-256：`4e12a51e3522ede78fcfe0de565721df05e9c2309899a576d4964a362e0d38d2`，有效期至 2026-11-25。
 3. 下载并保存 Actions artifact，随后进行 Watch S4、锁屏停止保存、GPS 和磁贴真机验证。
 4. 等待用户实机验证后再决定是否创建 release。
+
+## 本次 Copilot 云签名配置任务（2026-10-26 run 20261026-131509-fd030b6e）
+
+- 已完成：两端版本升为 `0.3.2` / `versionCode 5`；Actions 恢复固定 PKCS12、强制别名 `guyanjiao-release`、检查三项 signing secret，并清理 runner 上的 keystore/private.pem。
+- 已完成：`ExportSigning.java` 不再接受命令行口令；`build.ps1` 不再生成或回退测试 keystore，apksigner 仅从环境变量读取口令；公开证书指纹配置位于 `signing/release-signing.json`。
+- 已完成：workflow 增加 Android/Watch 版本一致性检查和 `apksigner verify`；`verify-pair.mjs` 检查固定证书指纹、同证书、CRC、包结构和私钥排除。
+- 本地精确检查：`node --check verify-pair.mjs` 通过；JSON 静态解析通过；PowerShell 脚本解析通过；`git diff --check` 通过；`scripts/build-local.ps1` 明确拒绝本地构建并通过拒绝检查。
+- 按用户要求未运行 Java/Android/Vela 编译、`scripts/test.ps1` 或本地 APK/RPK 构建。未提交或推送。
+- 待云端：推送后配置 `ACTION_RELAY_KEYSTORE_BASE64`、`ACTION_RELAY_STORE_PASSWORD`、`ACTION_RELAY_KEY_PASSWORD`，运行 Actions 完整测试、签名/包校验并下载 artifact。仍待真机验证 Watch S4、锁屏停止保存、手机 GNSS 质量、视频 GPS 嵌入和磁贴运行时行为。
