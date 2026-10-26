@@ -9,7 +9,7 @@ function Assert-ApkSigner {
     $lines=@($Details|Where-Object{$_ -match 'certificate SHA-256 digest:'})
     if($lines.Count -eq 0){throw 'APK signer certificate digest is missing.'}
     foreach($line in $lines){
-        $match=[regex]::Match($line,'^.+: certificate SHA-256 digest:\s*([a-fA-F0-9]{64})\s*$')
+        $match=[regex]::Match($line,'^.+? certificate SHA-256 digest:\s*([a-fA-F0-9]{64})\s*$')
         if(-not $match.Success -or $match.Groups[1].Value.ToUpperInvariant() -ne $ExpectedFingerprint.ToUpperInvariant()){
             throw 'APK signer differs from the fixed certificate or could not be parsed.'
         }
