@@ -30,3 +30,9 @@
 ## 真机待验
 
 Action 4 实际回报温度字段；S4 9/3 点图文可读性、无遮挡与图标视觉尺寸；断线后不得保留旧的“正常”温度状态。模拟和几何测试不替代真机验收。
+
+## Release 分发
+
+2026-10-27 已发布 [v0.4.3](https://github.com/GuYanjiao/action-relay/releases/tag/v0.4.3)，包含配套 APK/RPK、SHA256SUMS.txt 和 package-verification.json。附件直接取自上述云端构建，上传后按 GitHub 服务器返回的 digest 再次核对，未重新编译或签包。
+
+签名标签 `v0.4.3` 指向 `c218a1e`：相对已验收代码仅含验收文档和 README 变更，应用代码不变。提交与标签的 OpenPGP 签名均已验证；README 改为功能、使用和下载介绍。

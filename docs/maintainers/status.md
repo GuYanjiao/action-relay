@@ -14,6 +14,8 @@
 
 ## 最新验收
 
+- 已发布 [v0.4.3 Release](https://github.com/GuYanjiao/action-relay/releases/tag/v0.4.3)，包含已验收 APK/RPK 及校验报告；签名标签与服务器附件摘要核对通过。README 已改为功能介绍和使用说明。
+
 - [0.4.3 云端验收](../validation/cloud-acceptance-0.4.3.md)通过；温度等级转发与缺失清空、9/3 点对称布局、统一图标尺寸检查通过。
 
 - [0.4.2 云端验收](../validation/cloud-acceptance-0.4.2.md)通过；时长格式、圆屏边界与断线主键回归通过，实际设备行为待验。
