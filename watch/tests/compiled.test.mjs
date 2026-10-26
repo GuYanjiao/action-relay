@@ -14,11 +14,11 @@ const timers=new Map();
 const connect={send:opts=>{sent.push(opts.data);opts.success();},getReadyState:opts=>opts.success({status:1})};
 const native=name=>{
   if(name==='@app-module/system.interconnect') return {instance:()=>connect};
-  if(name==='@system.storage') return {
+  if(name==='@system.storage'||name==='@app-module/system.storage') return {
     get:opts=>opts.success(feedbackValue),
     set:opts=>{feedbackValue=opts.value;}
   };
-  if(name==='@system.vibrator') return {vibrate:opts=>vibrations.push(opts.mode)};
+  if(name==='@system.vibrator'||name==='@app-module/system.vibrator') return {vibrate:opts=>vibrations.push(opts.mode)};
   assert.fail(`unexpected native module: ${name}`);
 };
 const global={$app_require$:native,setTimeout:fn=>{timers.set(++timerId,fn);return timerId;},clearTimeout:id=>timers.delete(id)};
