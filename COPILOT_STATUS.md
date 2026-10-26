@@ -44,10 +44,11 @@
 - Vela 编译后页面测试已通过。
 - APK/RPK、签名校验和 `artifacts/` 交付路径已生成。
 - 云编译工作流尚未在 GitHub runner 上实际执行；本地没有可访问的 Android SDK，因此不能在此环境替代验证。
+- 上一次 GitHub Actions 云编译失败在 SDK 初始化阶段：`android-actions/setup-android@v3` 默认尝试安装已废弃的 `tools` 包，尚未进入项目编译。
 - 尚未完成真实 Watch S4、锁屏停止保存和 Mimo GPS 仪表盘验证。
 
 ## 下一步
 
-1. 提交并推送 `work/v0.3-watch-first`，让 GitHub Actions 再做一次云端构建验证。
+1. 已修复云编译工作流：显式向 `setup-android` 传入 `platform-tools`、`platforms;android-36` 和 `build-tools;36.0.0`，避免安装废弃的 `tools` 包；提交并推送后重新验证。
 2. 下载并保存 Actions artifact，随后进行 Watch S4、锁屏停止保存、GPS 和磁贴真机验证。
 3. 等待用户实机验证后再决定是否创建 release。

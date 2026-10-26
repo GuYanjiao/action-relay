@@ -25,9 +25,8 @@ jobs:
           cache: npm
           cache-dependency-path: watch/package-lock.json
       - uses: android-actions/setup-android@v3
-      - name: Install Android SDK
-        shell: pwsh
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - name: Install watch dependencies
         working-directory: watch
         run: npm ci
