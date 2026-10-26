@@ -1,10 +1,10 @@
 # 当前交接索引
 
-当前版本 0.3.3 / 6，主分支 main。GPS 启动与手表界面修改已完成代码检查；本轮延迟、主题与设备记忆修改仅完成源码静态检查，云端构建和硬件验证单独列在项目状态中。
+当前版本 0.3.3 / 6，主分支 main。本轮延迟、系统主题与设备记忆修改已通过云端构建、完整回归和固定签名校验；硬件验证单独列在项目状态中。
 
 - [项目说明与安装](README.md)
 - [项目状态](COPILOT_STATUS.md)
-- [云端验收记录](docs/cloud-acceptance-0.3.2.md)
+- [0.3.3 云端验收记录](docs/cloud-acceptance-0.3.3.md)
 - [Copilot 检查清单](docs/copilot-checklists/)
 - [自动派发方式](docs/copilot-workflow.md)
 
