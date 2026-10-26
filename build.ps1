@@ -70,6 +70,5 @@ if(-not $SkipWatch){
 }
 Get-ChildItem -LiteralPath $build -Force -Exclude ("ActionRelay-$VersionName.apk") |
   Remove-Item -Recurse -Force
-Remove-GeneratedPath 'watch\build'
 Remove-GeneratedPath 'watch\sign'
 Write-Output "Built $apk"

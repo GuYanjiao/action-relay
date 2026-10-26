@@ -106,7 +106,8 @@ GPS 只发送手机真实测量值，并保留新鲜度、质量和完整性判�
 构建使用 Android 官方 AAPT2、D8、zipalign 和 apksigner；更新工具链不需要引入另一个并行的 Gradle 工程。根目录和 watch/ 各有锁文件，分别通过 `npm ci --ignore-scripts` 和 `npm ci` 恢复校验工具及官方手表工具链，避免在构建中临时解析未锁定的 JSZip。`aiot-toolkit` 保持官方 latest 稳定版 2.0.5，不使用预发布标签。
 
 打包脚本会在云端构建开始前清理旧的 Android/手表生成目录，构建成功后仅保留最终
-APK/RPK，删除 dex、classes、资源中间包和手表签名工作目录；因此旧版本包不会混入
+APK/RPK，删除 dex、classes、资源中间包和手表签名工作目录；手表编译目录会保留到
+云端回归测试结束，因为编译后页面测试需要读取其中的页面输出。因此旧版本包不会混入
 工作区或上传物。正式 APK/RPK 体积应与项目源码、依赖安装目录和本地缓存分开统计。
 
 维护记录：[项目状态](maintainers/status.md)、[云端验收](validation/)、[停止确认机制](testing/stop-confirmation.md)。早期检查清单属于历史任务记录，当前目录与执行方式以本文及 AGENTS.md 为准。
