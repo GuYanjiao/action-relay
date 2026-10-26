@@ -13,6 +13,8 @@ This repository is the writable project. A separate ChatGPT project `sources/` m
 
 ## Shared work
 
+- User preference: every review checklist intended for Copilot must be saved as its own dated Markdown file under `docs/copilot-checklists/` and committed/pushed to this GitHub repository. Include the reviewed commit, prioritized findings, verification evidence, and acceptance criteria; link the uploaded file in the user reply. Preserve earlier checklists as history. Read the latest applicable checklist before continuing implementation.
+
 - Read COPILOT_HANDOFF.md for current ownership and unfinished integration. Keep one writer per file.
 - Use the current development branch; main/v0.2.0 is the rollback baseline. Do not reset or discard another agent's working changes.
 - Keep handoffs concise: changed files, exact tests run, unresolved hardware checks. Update COPILOT_STATUS.md at the start and end of a delegated task.
