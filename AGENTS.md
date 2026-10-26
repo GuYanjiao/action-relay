@@ -13,6 +13,9 @@ This repository is the writable project. A separate ChatGPT project `sources/` m
 
 ## Shared work
 
+- User preference: work in this local repository, validate changes, then commit and push finished work to GitHub.
+- Save every Copilot review checklist as its own dated Markdown file under `docs/copilot-checklists/`, push it with Git, and link the repository file in the reply. Preserve earlier checklists.
+- The user authorizes calling the locally installed VS Code GitHub Copilot agent for this project's coding work. Use `scripts/start-copilot.ps1 -TaskFile <task.md>` to hand off a bounded task without asking the user to open the start page. Read `docs/copilot-workflow.md` first. Verify the returned result file and actual changes before claiming completion; do not dispatch duplicate workers or write the same files concurrently.
 - Read COPILOT_HANDOFF.md for current ownership and unfinished integration. Keep one writer per file.
 - Use the current development branch; main/v0.2.0 is the rollback baseline. Do not reset or discard another agent's working changes.
 - Keep handoffs concise: changed files, exact tests run, unresolved hardware checks. Update COPILOT_STATUS.md at the start and end of a delegated task.
