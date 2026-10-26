@@ -28,6 +28,7 @@ try{
   Checked 'node' @('watch/tests/controller.test.mjs')
   Checked 'node' @('watch/tests/hold.test.mjs')
   Checked 'node' @('watch/tests/display.test.mjs')
+  Checked 'node' @('watch/tests/layout.test.mjs')
   Checked 'node' @('watch/tests/compiled.test.mjs')
  }
 }finally{Pop-Location}

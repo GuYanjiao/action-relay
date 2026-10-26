@@ -2,22 +2,18 @@
   <div class="page">
     <div class="remote" if="{{!toolsOpen}}">
       <div class="status-strip">
-        <div class="status-item"><image class="status-icon" src="{{phoneIcon}}"></image></div>
-        <div class="status-item"><image class="status-icon" src="{{cameraIcon}}"></image></div>
-        <div class="status-item"><image class="status-icon" src="{{gpsIcon}}"></image></div>
-        <div class="status-item"><image class="status-icon" src="{{batteryIcon}}"></image></div>
+        <div class="status-item status-phone" onclick="openTools"><image class="status-icon" src="{{phoneIcon}}"></image></div>
+        <div class="status-item status-camera" onclick="openTools"><image class="status-icon" src="{{cameraIcon}}"></image></div>
+        <div class="status-item status-gps" onclick="openTools"><image class="status-icon" src="{{gpsIcon}}"></image></div>
+        <div class="status-item status-battery" onclick="openTools"><image class="status-icon" src="{{batteryIcon}}"></image></div>
       </div>
-      <div class="storage-badge"><text class="storage-caption">SD</text><text class="storage-value">{{storageText}}</text></div>
-      <div class="capture" ontouchstart="startCapturePress" ontouchend="endCapturePress" ontouchcancel="endCapturePress">
-        <image class="capture-image" src="{{captureIcon}}"></image>
+      <div class="storage-badge"><image class="storage-icon" src="/common/ui/sd-card.png"></image><text class="storage-value">{{remainingText}}</text></div>
+      <div class="{{captureClass}}" ontouchstart="startCapturePress" ontouchend="endCapturePress" ontouchcancel="endCapturePress">
+        <image class="{{captureImageClass}}" src="{{captureIcon}}"></image>
         <progress if="{{pressRingVisible}}" class="capture-progress" type="arc" percent="{{pressProgress}}"></progress>
       </div>
       <text class="{{timerClass}}">{{timerText}}</text>
-      <div class="edge-tools">
-        <div class="edge-tool" onclick="refreshStatus"><image class="tool-icon" src="/common/ui/refresh.png"></image></div>
-        <text class="format-summary">{{videoFormatText}}</text>
-        <div class="edge-tool" onclick="openTools"><image class="tool-icon" src="/common/ui/more.png"></image></div>
-      </div>
+      <text class="format-summary">{{videoFormatText}}</text>
     </div>
     <div class="tools" if="{{toolsOpen}}">
       <text class="tools-title">连接</text>
@@ -34,7 +30,7 @@
 <script>
 import { createRelayController } from '../../common/relayController.js'
 import { createHoldProgress } from '../../common/holdProgress.js'
-import { storageLabel, videoLabel } from '../../common/cameraDisplay.js'
+import { remainingLabel, videoLabel } from '../../common/cameraDisplay.js'
 
 export default {
   private: {
@@ -48,9 +44,12 @@ export default {
     batteryIcon: '/common/ui/battery-off.png',
     timerText: '--:--',
     timerClass: 'timer',
-    storageText: '—',
+    remainingText: '—',
     videoFormatText: '—',
-    captureIcon: '/common/ui/capture-disabled.png',
+    captureIcon: '/common/ui/refresh.png',
+    captureClass: 'capture capture-reconnect',
+    captureImageClass: 'capture-image capture-refresh',
+    refreshMode: true,
     startEnabled: false,
     stopEnabled: false,
     pressProgress: 0,
@@ -88,13 +87,16 @@ export default {
     this.noteText = state.noteText || '状态以相机回报为准'
     this.startEnabled = state.startEnabled === true
     this.stopEnabled = state.stopEnabled === true
-    this.storageText = storageLabel(state.storageMb)
+    this.remainingText = remainingLabel(state.remainingSeconds)
     this.videoFormatText = videoLabel(state.cameraMode, state.videoResolution, state.fpsIndex)
     var phone = state.phoneConnected === true
     var camera = state.cameraReady === true
     var recording = state.recording === true
     var phase = state.recordPhase || 'unknown'
     var pending = state.pending === true || phase === 'starting' || phase === 'stopping'
+    this.refreshMode = (!phone || !camera) && !pending
+    this.captureClass = this.refreshMode ? 'capture capture-reconnect' : 'capture'
+    this.captureImageClass = this.refreshMode ? 'capture-image capture-refresh' : 'capture-image'
     this.phoneIcon = '/common/ui/phone-' + (phone ? 'on' : 'off') + '.png'
     this.cameraIcon = '/common/ui/camera-' + (camera ? 'on' : 'off') + '.png'
     this.batteryIcon = '/common/ui/battery-' + (typeof state.battery === 'number' && state.battery >= 0 ? (state.battery <= 20 ? 'low' : state.battery <= 50 ? 'medium' : 'high') : 'off') + '.png'
@@ -103,7 +105,8 @@ export default {
     var seconds = typeof state.recordSeconds === 'number' && state.recordSeconds >= 0 ? Math.floor(state.recordSeconds) : 0
     this.timerText = !camera || phase === 'unknown' ? '--:--' : this.timeText(recording ? seconds : 0)
     this.timerClass = recording ? 'timer timer-recording' : 'timer'
-    if (this.stopEnabled) this.captureIcon = '/common/ui/capture-stop.png'
+    if (this.refreshMode) this.captureIcon = '/common/ui/refresh.png'
+    else if (this.stopEnabled) this.captureIcon = '/common/ui/capture-stop.png'
     else if (this.startEnabled) this.captureIcon = '/common/ui/capture-record.png'
     else this.captureIcon = '/common/ui/capture-' + (pending ? 'pending' : 'disabled') + '.png'
   },
@@ -137,6 +140,7 @@ export default {
     if (this.feedbackEnabled && this._vibrator) this._vibrator.vibrate({ mode: mode })
   },
   startCapturePress() {
+    if (this.refreshMode) { this.refreshStatus(); return }
     if (this.stopEnabled) {
       if (this._hold && this._hold.start()) this.playFeedback('long')
     } else if (this.startEnabled && this._relay) {
@@ -145,11 +149,7 @@ export default {
     }
   },
   endCapturePress() { if (this._hold) this._hold.release() },
-  tapCapture() {
-    if (!this._relay) return
-    if (this.startEnabled && this._relay) this._relay.command('start')
-  },
-  openTools() { this.toolsOpen = true },
+  openTools() { if (this._hold) this._hold.cancel(); this.toolsOpen = true },
   closeTools() { this.toolsOpen = false },
   refreshStatus() { if (this._relay) this._relay.refresh() }
 }
@@ -158,21 +158,24 @@ export default {
 <style>
 .page { width: 466px; height: 466px; background-color: #000000; }
 .remote { width: 466px; height: 466px; background-color: #000000; }
-.status-strip { position: absolute; left: 73px; top: 48px; width: 320px; height: 51px; flex-direction: row; justify-content: center; }
-.status-item { width: 80px; height: 51px; align-items: center; justify-content: center; }
+.status-strip { position: absolute; left: 0px; top: 0px; width: 466px; height: 150px; }
+.status-item { position: absolute; width: 56px; height: 56px; align-items: center; justify-content: center; }
+.status-phone { left: 74px; top: 87px; }
+.status-camera { left: 157px; top: 36px; }
+.status-gps { left: 253px; top: 36px; }
+.status-battery { left: 336px; top: 87px; }
 .status-icon { width: 44px; height: 44px; }
 .timer { position: absolute; left: 145px; top: 342px; width: 176px; height: 40px; text-align: center; font-size: 32px; color: #f1f3f6; }
 .timer-recording { color: #ff6165; }
-.capture { position: absolute; left: 125px; top: 125px; width: 216px; height: 216px; align-items: center; justify-content: center; }
+.capture { position: absolute; left: 121px; top: 121px; width: 224px; height: 224px; align-items: center; justify-content: center; }
+.capture-reconnect { border-radius: 112px; border-width: 2px; border-color: #66717e; }
 .capture-image { width: 192px; height: 192px; }
-.capture-progress { position: absolute; left: 0px; top: 0px; width: 216px; height: 216px; color: #f1f3f6; layer-color: #272b33; stroke-width: 6px; start-angle: 0deg; total-angle: 360deg; center-x: 108px; center-y: 108px; radius: 104px; }
-.edge-tools { position: absolute; left: 95px; top: 386px; width: 276px; height: 50px; flex-direction: row; align-items: center; justify-content: space-between; }
-.format-summary { width: 128px; height: 50px; text-align: center; font-size: 18px; color: #cbd3df; }
-.storage-badge { position: absolute; left: 43px; top: 133px; width: 100px; height: 46px; flex-direction: column; align-items: center; justify-content: center; }
-.storage-caption { width: 100px; height: 19px; text-align: center; font-size: 12px; color: #9da6b5; }
-.storage-value { width: 100px; height: 25px; text-align: center; font-size: 16px; color: #f1f3f6; }
-.edge-tool { width: 64px; height: 50px; border-radius: 25px; background-color: #1d2128; align-items: center; justify-content: center; }
-.tool-icon { width: 27px; height: 27px; }
+.capture-refresh { width: 96px; height: 96px; }
+.capture-progress { position: absolute; left: 0px; top: 0px; width: 224px; height: 224px; color: #ff304d; layer-color: #272b33; stroke-width: 12px; start-angle: 0deg; total-angle: 360deg; center-x: 112px; center-y: 112px; radius: 104px; }
+.format-summary { position: absolute; left: 133px; top: 390px; width: 200px; height: 32px; text-align: center; font-size: 20px; color: #cbd3df; }
+.storage-badge { position: absolute; left: 43px; top: 151px; width: 100px; height: 53px; flex-direction: column; align-items: center; justify-content: center; }
+.storage-icon { width: 28px; height: 28px; }
+.storage-value { width: 100px; height: 25px; text-align: center; font-size: 15px; color: #f1f3f6; }
 .tools { width: 466px; height: 466px; background-color: #000000; flex-direction: column; align-items: center; padding-top: 38px; }
 .tools-title { width: 270px; height: 46px; text-align: center; font-size: 27px; color: #f1f3f6; }
 .tools-row { width: 290px; height: 48px; flex-direction: row; align-items: center; }
