@@ -43,12 +43,13 @@
 - Android 全量编译已完成；首次编译发现并修复 `RecordingTileService` 的无效设置常量。
 - Vela 编译后页面测试已通过。
 - APK/RPK、签名校验和 `artifacts/` 交付路径已生成。
-- 云编译工作流尚未在 GitHub runner 上实际执行；本地没有可访问的 Android SDK，因此不能在此环境替代验证。
+- 云编译工作流已在 GitHub runner 上成功执行（run `40266562983`，提交 `95a11f5`）。
 - 上一次 GitHub Actions 云编译失败在 SDK 初始化阶段：`android-actions/setup-android@v3` 默认尝试安装已废弃的 `tools` 包，尚未进入项目编译。
 - 尚未完成真实 Watch S4、锁屏停止保存和 Mimo GPS 仪表盘验证。
 
 ## 下一步
 
-1. 已修复云编译工作流：显式向 `setup-android` 传入 `platform-tools`、`platforms;android-36` 和 `build-tools;36.0.0`，避免安装废弃的 `tools` 包；提交并推送后重新验证。
-2. 下载并保存 Actions artifact，随后进行 Watch S4、锁屏停止保存、GPS 和磁贴真机验证。
-3. 等待用户实机验证后再决定是否创建 release。
+1. 已修复并验证云编译工作流：显式向 `setup-android` 传入 `platform-tools`、`platforms;android-36` 和 `build-tools;36.0.0`，避免安装废弃的 `tools` 包。
+2. 云端 artifact：`action-relay-0.3.0-95a11f5611061d70fda23f82291809be2910c400`，SHA-256：`4e12a51e3522ede78fcfe0de565721df05e9c2309899a576d4964a362e0d38d2`，有效期至 2026-11-25。
+3. 下载并保存 Actions artifact，随后进行 Watch S4、锁屏停止保存、GPS 和磁贴真机验证。
+4. 等待用户实机验证后再决定是否创建 release。
