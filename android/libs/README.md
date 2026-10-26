@@ -10,6 +10,6 @@ The AAR contains no resources or application components. Its manifest declares p
 
 The app uses `NodeApi`, `AuthApi`, `MessageApi`, and `ServiceApi`. It requests only `Permission.DEVICE_MANAGER`, which Xiaomi documents as sufficient for inter-application messaging. `Permission.NOTIFY` is not requested because this app does not send system notifications to the watch through Xiaomi's SDK.
 
-Watch and phone app package names and signing certificates must match. SDK 1.4's Java bytecode targets older Android APIs; successful compilation against API 36 does not establish runtime compatibility with the user's Android 17 or companion-app version.
+Watch and phone app package names and signing certificates must match. SDK 1.4's Java bytecode targets older Android APIs; compiling against a newer Android SDK does not establish runtime compatibility with a particular Android or companion-app version. This is the published SDK included in the official demo referenced above; do not replace it with an unrelated third-party artifact merely to obtain a higher version number.
 
 The older integration PDF inside the demo archive references Color2 test firmware. Those firmware-upgrade instructions are not part of this app's installation procedure.

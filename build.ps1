@@ -24,8 +24,8 @@ if (-not (Test-Path -LiteralPath $SigningKeystore)) { throw "Signing keystore no
 if (-not $env:ACTION_RELAY_STORE_PASSWORD) { throw 'ACTION_RELAY_STORE_PASSWORD is required.' }
 if (-not $env:ACTION_RELAY_KEY_PASSWORD) { throw 'ACTION_RELAY_KEY_PASSWORD is required.' }
 if(-not $JdkBin){$JdkBin=Join-Path $env:JAVA_HOME 'bin'}
-if(-not (Test-Path -LiteralPath (Join-Path $AndroidPlatform 'android.jar'))){throw 'Pass -AndroidPlatform with android.jar (API 36).'}
-if(-not (Test-Path -LiteralPath (Join-Path $BuildTools 'aapt2.exe'))){throw 'Pass -BuildTools with Android SDK build tools 36.0.0.'}
+if(-not (Test-Path -LiteralPath (Join-Path $AndroidPlatform 'android.jar'))){throw 'Pass -AndroidPlatform with android.jar (current cloud platform: API 37.2).'}
+if(-not (Test-Path -LiteralPath (Join-Path $BuildTools 'aapt2.exe'))){throw 'Pass -BuildTools with Android SDK build tools 37.0.0.'}
 function Run-Checked([string]$program,[string[]]$arguments){& $program @arguments;if($LASTEXITCODE -ne 0){throw "$program failed ($LASTEXITCODE)"}}
 $build=Join-Path $projectRoot 'android\build'
 $sign=Join-Path $projectRoot '.signing'

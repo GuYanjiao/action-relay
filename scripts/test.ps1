@@ -11,7 +11,7 @@ try{
   $files+=@((Get-Item 'android/src/cn/local/actionrelay/ReconnectPolicy.java').FullName)
   $files+=@((Get-Item 'android/src/cn/local/actionrelay/WatchOutbox.java').FullName)
   $files+=@((Get-Item 'android/src/cn/local/actionrelay/GpsLifecycle.java').FullName)
-  foreach($folder in @('tests/protocol','tests/transport','android/test','android/tests')){if(Test-Path $folder){$files+=@(Get-ChildItem $folder -Filter '*.java' -Recurse -File|ForEach-Object{$_.FullName})}}
+  foreach($folder in @('tests/protocol','tests/transport','tests/lifecycle')){$files+=@(Get-ChildItem $folder -Filter '*.java' -Recurse -File|ForEach-Object{$_.FullName})}
   $argFile=Join-Path $classes 'sources.args';[IO.File]::WriteAllText($argFile,(($files|ForEach-Object{'"'+$_.Replace('\','/')+'"'})-join "`n"),[Text.UTF8Encoding]::new($false))
   Checked 'javac' @('--release','8','-encoding','UTF-8','-d',$classes,('@'+$argFile))
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.DjiProtocolSelfTest','tests/connect_cmd_frame.txt')

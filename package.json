@@ -1,0 +1,8 @@
+{
+  "name": "action-relay-tools",
+  "version": "0.3.3",
+  "private": true,
+  "description": "Cloud build verification tools for Action Relay",
+  "scripts": { "verify:pair": "node verify-pair.mjs" },
+  "devDependencies": { "jszip": "3.10.2" }
+}

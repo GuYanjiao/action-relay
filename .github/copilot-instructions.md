@@ -1,3 +1,3 @@
-Use [AGENTS.md](../AGENTS.md) as the shared project requirements. Read the latest applicable file in docs/copilot-checklists/; COPILOT_HANDOFF.md is historical.
+Use [AGENTS.md](../AGENTS.md) as the shared project requirements. Read docs/maintainers/status.md and the latest applicable file in docs/copilot-checklists/; see docs/development.md for development and cloud build documentation.
 
 This is native Java Android plus Xiaomi Vela UX/JavaScript. Work locally on source and static checks only. Do not invoke Java/Android/Vela compilers or local package builds. GitHub Actions runs the builds and regression suites with the fixed release signer stored in Actions Secrets. Do not read local private signing material. Keep Git commits signed with the configured OpenPGP key, and report cloud checks separately from hardware validation.

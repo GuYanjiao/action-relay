@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {X509Certificate,createHash} from 'node:crypto';
 const require=createRequire(import.meta.url);
-const JSZip=require(process.env.S4_JSZIP_PATH||'jszip');
+const JSZip=require('jszip');
 const root=path.dirname(fileURLToPath(import.meta.url));
 const sourceManifest=JSON.parse(fs.readFileSync(path.join(root,'watch/src/manifest.json')));
 const versionName=process.env.ACTION_RELAY_VERSION_NAME||sourceManifest.versionName;

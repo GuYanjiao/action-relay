@@ -14,13 +14,13 @@ This repository is the writable project. A separate ChatGPT project `sources/` m
 ## Shared work
 
 - User preference: work in this local repository, validate changes, then commit and push finished work to GitHub.
-- Latest user preference: do not compile APK/RPK or run Java compilation locally. Edit and perform static checks locally; all builds, executable regression checks, package signing and installer verification run in GitHub Actions. Do not call scripts/build-local.ps1 or invoke the Android/Vela compiler locally unless the user explicitly changes this preference.
+- Latest user preference: do not compile APK/RPK or run Java compilation locally. Edit and perform static checks locally; all builds, executable regression checks, package signing and installer verification run in GitHub Actions. Do not invoke the Android/Vela compiler locally unless the user explicitly changes this preference.
 - Sign future Git commits and tags with the user's configured OpenPGP key from `C:/Users/29804/AppData/Local/SoftwareSigning/GuYanjiao`. Keep signing material outside the repository and verify the resulting signature before pushing; do not change APK/RPK signing identities merely because the Git signing key changed.
 - Save every Copilot review checklist as its own dated Markdown file under `docs/copilot-checklists/`, push it with Git, and link the repository file in the reply. Preserve earlier checklists.
 - The user authorizes calling the locally installed VS Code GitHub Copilot agent for this project's coding work. Use `scripts/start-copilot.ps1 -TaskFile <task.md>` to hand off a bounded task without asking the user to open the start page. Read `docs/copilot-workflow.md` first. Verify the returned result file and actual changes before claiming completion; do not dispatch duplicate workers or write the same files concurrently.
-- Read the latest applicable checklist and COPILOT_STATUS.md for active work. COPILOT_HANDOFF.md is historical; keep one writer per file.
+- Read the latest applicable checklist and docs/maintainers/status.md for active work; keep one writer per file. Public project/development information belongs in README.md and docs/development.md; maintenance and cloud evidence stay under docs/maintainers/ and docs/validation/.
 - main is the integration branch. The fixed historical rollback point is tag v0.2.0. The user authorizes merging completed work into main after cloud checks; retain other people's commits and never force-reset shared history.
-- Keep handoffs concise: changed files, exact tests run, unresolved hardware checks. Update COPILOT_STATUS.md at the start and end of a delegated task.
+- Keep handoffs concise: changed files, exact tests run, unresolved hardware checks. Update docs/maintainers/status.md at the start and end of a delegated task.
 - Signing material is local in ignored .signing/ and watch/sign/. Never print private keys or commit keystores, credentials, personal GPS traces, or raw personal logs.
 
 ## Validation
