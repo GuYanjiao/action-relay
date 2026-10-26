@@ -8,6 +8,7 @@
         <div class="status-item"><image class="status-icon" src="{{batteryIcon}}"></image></div>
       </div>
       <div class="capture" ontouchstart="startCapturePress" ontouchend="endCapturePress" ontouchcancel="endCapturePress"><image class="capture-image" src="{{captureIcon}}"></image></div>
+      <image if="{{pressRingVisible}}" class="capture-progress" src="{{pressProgressIcon}}"></image>
       <text class="{{timerClass}}">{{timerText}}</text>
       <div class="edge-tools">
         <div class="edge-tool" onclick="refreshStatus"><image class="tool-icon" src="/common/ui/refresh.png"></image></div>
@@ -43,7 +44,11 @@ export default {
     captureIcon: '/common/ui/capture-disabled.png',
     startEnabled: false,
     stopEnabled: false,
-    capturePressTimer: null
+    capturePressTimer: null,
+    pressProgressTimer: null,
+    pressProgress: 0,
+    pressRingVisible: false,
+    pressProgressIcon: '/common/ui/press-0.png'
   },
   onInit() {
     this._relay = createRelayController({
@@ -71,7 +76,7 @@ export default {
     var pending = state.pending === true || phase === 'starting' || phase === 'stopping'
     this.phoneIcon = '/common/ui/phone-' + (phone ? 'on' : 'off') + '.png'
     this.cameraIcon = '/common/ui/camera-' + (camera ? 'on' : 'off') + '.png'
-    this.batteryIcon = '/common/ui/battery-' + (typeof state.battery === 'number' && state.battery >= 0 ? (state.battery <= 20 ? 'low' : state.battery <= 50 ? 'medium' : 'high') : 'off') + (typeof state.battery === 'number' && state.battery >= 0 ? '.svg' : '.png')
+    this.batteryIcon = '/common/ui/battery-' + (typeof state.battery === 'number' && state.battery >= 0 ? (state.battery <= 20 ? 'low' : state.battery <= 50 ? 'medium' : 'high') : 'off') + '.png'
     var gps = state.gpsState || 'off'
     this.gpsIcon = '/common/ui/gps-' + (!state.gpsEnabled ? 'off' : gps === 'ready' ? 'on' : gps === 'denied' || gps === 'provider_off' || gps === 'unavailable' ? 'error' : 'wait') + '.png'
     var seconds = typeof state.recordSeconds === 'number' && state.recordSeconds >= 0 ? Math.floor(state.recordSeconds) : 0
@@ -87,12 +92,21 @@ export default {
     return (minutes < 10 ? '0' : '') + minutes + ':' + (remainder < 10 ? '0' : '') + remainder
   },
   onShow() { if (this._relay) this._relay.show() },
-  onHide() { this.endCapturePress(); if (this._relay) this._relay.hide() },
-  onDestroy() { this.endCapturePress(); if (this._relay) this._relay.destroy(); this._relay = null },
+  onHide() { this.cancelPressFeedback(); if (this._relay) this._relay.hide() },
+  onDestroy() { this.cancelPressFeedback(); if (this._relay) this._relay.destroy(); this._relay = null },
   startCapturePress() {
     if (this.stopEnabled) {
+      this.cancelPressFeedback()
+      this.pressProgress = 0
+      this.pressRingVisible = true
+      this.updatePressProgressIcon()
+      var startedAt = Date.now()
+      this.pressProgressTimer = setTimeout(() => this.updatePressProgress(startedAt), 40)
       this._capturePressTimer = setTimeout(() => {
         this._capturePressTimer = null
+        this.pressProgress = 100
+        this.updatePressProgressIcon()
+        this.clearPressProgressTimer()
         if (this.stopEnabled && this._relay) this._relay.command('stop')
       }, 650)
     } else if (this.startEnabled && this._relay) {
@@ -104,6 +118,44 @@ export default {
       clearTimeout(this._capturePressTimer)
       this._capturePressTimer = null
     }
+    this.clearPressProgressTimer()
+    if (this.pressRingVisible) this.animatePressRelease()
+  },
+  updatePressProgress(startedAt) {
+    if (!this.pressRingVisible || !this.stopEnabled || this._capturePressTimer === null) return
+    this.pressProgress = Math.min(100, Math.round((Date.now() - startedAt) * 100 / 650))
+    this.updatePressProgressIcon()
+    this.pressProgressTimer = setTimeout(() => this.updatePressProgress(startedAt), 40)
+  },
+  updatePressProgressIcon() {
+    var segment = Math.max(0, Math.min(100, Math.round(this.pressProgress / 10) * 10))
+    this.pressProgressIcon = '/common/ui/press-' + segment + '.png'
+  },
+  clearPressProgressTimer() {
+    if (this.pressProgressTimer !== null && this.pressProgressTimer !== undefined) {
+      clearTimeout(this.pressProgressTimer)
+      this.pressProgressTimer = null
+    }
+  },
+  cancelPressFeedback() {
+    if (this._capturePressTimer !== null && this._capturePressTimer !== undefined) {
+      clearTimeout(this._capturePressTimer)
+      this._capturePressTimer = null
+    }
+    this.clearPressProgressTimer()
+    this.pressProgress = 0
+    this.pressRingVisible = false
+    this.updatePressProgressIcon()
+  },
+  animatePressRelease() {
+    this.clearPressProgressTimer()
+    if (this.pressProgress <= 0) {
+      this.pressRingVisible = false
+      return
+    }
+    this.pressProgress = Math.max(0, this.pressProgress - 10)
+    this.updatePressProgressIcon()
+    this.pressProgressTimer = setTimeout(() => this.animatePressRelease(), 35)
   },
   tapCapture() {
     if (!this._relay) return
@@ -125,6 +177,7 @@ export default {
 .timer-recording { color: #ff6165; }
 .capture { position: absolute; left: 137px; top: 137px; width: 192px; height: 192px; align-items: center; justify-content: center; }
 .capture-image { width: 192px; height: 192px; }
+.capture-progress { position: absolute; left: 125px; top: 125px; width: 216px; height: 216px; }
 .edge-tools { position: absolute; left: 151px; top: 402px; width: 164px; height: 50px; flex-direction: row; justify-content: space-between; }
 .edge-tool { width: 64px; height: 50px; border-radius: 25px; background-color: #1d2128; align-items: center; justify-content: center; }
 .tool-icon { width: 27px; height: 27px; }

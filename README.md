@@ -2,7 +2,7 @@
 
 Action Relay 是一个 Android 手机中转应用和 Xiaomi Vela 手表端应用：用
 Xiaomi Watch S4 控制 DJI Osmo Action 4 开始或停止录像，并由手机采集真实
-GNSS 数据后发送给相机。当前版本为 **0.3.3（versionCode 6）**。
+GNSS 数据后发送给相机。当前版本为 **0.3.5（versionCode 8）**。
 
 ## 工作方式
 
