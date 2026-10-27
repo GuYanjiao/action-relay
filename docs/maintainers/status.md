@@ -1,10 +1,10 @@
 # 项目状态
 
-更新于 2026-10-27。当前版本 Android / Watch **0.4.4 / versionCode 13**，上一验收应用代码基线 `0a8ba35`，整合分支为 main。
+更新于 2026-10-27。当前版本 Android / Watch **0.4.4 / versionCode 13**，应用代码基线 `1087739`，整合分支为 main。
 
 ## 本轮进度
 
-- 0.4.4：调整计时和规格/侧边字号，移除更大的外圈；新增回放准备与拍照控制。已分段签名保存；云端验证待完成。实现假设与真机边界见[协议核对](../dji-watch-telemetry.md#044-回放及拍照控制)。
+- 0.4.4：调整计时和规格/侧边字号，移除更大的外圈；新增回放准备与拍照控制。已分段签名保存；[云端编译、完整回归和固定签名通过](../validation/cloud-acceptance-0.4.4.md)，回放/拍照真实设备行为待验。实现假设与真机边界见[协议核对](../dji-watch-telemetry.md#044-回放及拍照控制)。
 
 - 0.4.3：SD 图标与剩余时长移至 9 点；3 点新增温度状态，非摄氏数值；主界面六个状态图标共用 44px。新增缺失/过期温度与侧边布局回归；[云端编译、完整回归和固定签名通过](../validation/cloud-acceptance-0.4.3.md)，真机显示待验收。
 
@@ -15,6 +15,8 @@
 - 新增[手表小组件核对](../watch-widget-assessment.md)与[大疆可扩展信息](../dji-watch-telemetry.md)；已找到卡片读取/布局协议和 appId 字段，但尚未核实新提供者的注册方式；未实现系统卡片；公开 R SDK 未定义分辨率/帧率设置命令，未伪造可写控件。
 
 ## 最新验收
+
+- [0.4.4 云端验收](../validation/cloud-acceptance-0.4.4.md)通过，产物从对应 Actions 获取；尚未发布 v0.4.4 Release。
 
 - 已发布 [v0.4.3 Release](https://github.com/GuYanjiao/action-relay/releases/tag/v0.4.3)，包含已验收 APK/RPK 及校验报告；签名标签与服务器附件摘要核对通过。README 已改为功能介绍和使用说明。
 
