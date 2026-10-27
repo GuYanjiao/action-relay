@@ -86,6 +86,8 @@ page.applyState({phoneConnected:true,cameraReady:true,gpsEnabled:true,gpsState:'
 assert.equal(page.gpsIcon,'/common/ui/gps-error.png');
 page.applyState({phoneConnected:true,cameraReady:true,gpsEnabled:true,gpsState:'ready',recordPhase:'idle',canStart:true,canStop:false});
 assert.equal(page.gpsIcon,'/common/ui/gps-on.png');
+const completedStop=sent.find(x=>x.type==='command'&&x.action==='stop');
+connect.onmessage({data:JSON.stringify({v:1,type:'result',id:completedStop.id,session:'s',ok:true,phase:'confirmed'})});
 connect.onmessage({data:JSON.stringify({v:1,type:'status',camera:'ready',recording:null,canControl:false,canStart:false,canStop:false,canPhoto:true,cameraMode:5,busy:false,session:'s',seq:3,revision:3,ticket:'photo-ticket'})});
 assert.equal(page.photoEnabled,true);assert.equal(page.captureIcon,'/common/ui/capture-photo.png');assert.equal(page.timerText,'拍照');
 page.startCapturePress();assert.equal(sent.filter(x=>x.type==='command'&&x.action==='photo').length,1);
