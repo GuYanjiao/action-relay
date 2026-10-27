@@ -30,3 +30,11 @@ assert.equal(left.y+22,233,'side icons are centered at 9 and 3 oclock');
 assert.equal(number(style('status-icon'),'width'),44);assert.equal(number(style('status-icon'),'height'),44);
 assert.equal((ux.match(/class="status-icon"/g)||[]).length,6,'all six main telemetry icons share one size');
 console.log('PASS: symmetric 9/3 oclock telemetry, unified icon size and capture clearance');
+
+assert.ok(box('timer').y >= box('capture').y+box('capture').h+8,'timer clears the capture button');
+assert.equal(number(style('timer'),'font-size'),36);
+assert.equal(number(style('format-summary'),'font-size'),24);
+assert.equal(number(style('storage-value'),'font-size'),17);
+assert.equal(number(style('temperature-value'),'font-size'),19);
+assert.ok(number(ring,'radius')+number(ring,'stroke-width')/2<=number(style('capture-image'),'width')/2,'progress follows the existing inner ring, without a larger outer circle');
+assert.equal(style('capture-reconnect')['border-width'],undefined,'no extra thin outer border');

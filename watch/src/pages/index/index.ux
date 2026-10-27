@@ -170,18 +170,18 @@ export default {
 .status-gps { left: 253px; top: 36px; }
 .status-battery { left: 336px; top: 87px; }
 .status-icon { width: 44px; height: 44px; }
-.timer { position: absolute; left: 145px; top: 342px; width: 176px; height: 40px; text-align: center; font-size: 32px; color: #f1f3f6; }
+.timer { position: absolute; left: 145px; top: 354px; width: 176px; height: 44px; text-align: center; font-size: 36px; color: #f1f3f6; }
 .timer-recording { color: #ff6165; }
 .capture { position: absolute; left: 121px; top: 121px; width: 224px; height: 224px; align-items: center; justify-content: center; }
-.capture-reconnect { border-radius: 112px; border-width: 2px; border-color: #66717e; }
+.capture-reconnect { border-radius: 112px; }
 .capture-image { width: 192px; height: 192px; }
 .capture-refresh { width: 96px; height: 96px; }
-.capture-progress { position: absolute; left: 0px; top: 0px; width: 224px; height: 224px; color: #ff304d; layer-color: #272b33; stroke-width: 12px; start-angle: 0deg; total-angle: 360deg; center-x: 112px; center-y: 112px; radius: 104px; }
-.format-summary { position: absolute; left: 133px; top: 390px; width: 200px; height: 32px; text-align: center; font-size: 20px; color: #cbd3df; }
+.capture-progress { position: absolute; left: 0px; top: 0px; width: 224px; height: 224px; color: #ff304d; layer-color: #e4e8ed; stroke-width: 12px; start-angle: 0deg; total-angle: 360deg; center-x: 112px; center-y: 112px; radius: 90px; }
+.format-summary { position: absolute; left: 153px; top: 402px; width: 160px; height: 32px; text-align: center; font-size: 24px; color: #cbd3df; }
 .storage-badge { position: absolute; left: 14px; top: 211px; width: 104px; height: 69px; flex-direction: column; align-items: center; justify-content: center; }
 .temperature-badge { position: absolute; left: 348px; top: 211px; width: 104px; height: 69px; flex-direction: column; align-items: center; justify-content: center; }
-.temperature-value { width: 104px; height: 25px; text-align: center; font-size: 17px; color: #f1f3f6; }
-.storage-value { width: 104px; height: 25px; text-align: center; font-size: 15px; color: #f1f3f6; }
+.temperature-value { width: 104px; height: 25px; text-align: center; font-size: 19px; color: #f1f3f6; }
+.storage-value { width: 104px; height: 25px; text-align: center; font-size: 17px; color: #f1f3f6; }
 .tools { width: 466px; height: 466px; background-color: #000000; flex-direction: column; align-items: center; padding-top: 38px; }
 .tools-title { width: 270px; height: 46px; text-align: center; font-size: 27px; color: #f1f3f6; }
 .tools-row { width: 290px; height: 48px; flex-direction: row; align-items: center; }
