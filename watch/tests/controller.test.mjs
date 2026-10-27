@@ -182,4 +182,19 @@ for(const invalid of [{session:'session-b'},{seq:1},{revision:8},{camera:'invali
   for(const storageMb of [null,'64000',-1,4294967295]){t.status({storageMb});assert.equal(t.view().storageMb,-1);}
   t.controller.destroy();checked++;
 }
+{
+  const t=setup();t.controller.show();t.status({cameraMode:5,canPhoto:true,canStart:false,canStop:false,recording:null});
+  assert.equal(t.view().photoEnabled,true);assert.equal(t.controller.command('photo'),true);
+  assert.equal(t.controller.command('photo'),false,'duplicate photo tap is blocked');
+  assert.equal(t.sent.filter(x=>x.type==='command').length,1);
+  t.advance(9000);assert.equal(t.view().pending,true,'photo capture allows countdown instead of the video timeout');
+  t.advance(27000);assert.equal(t.view().pending,false);
+  assert.equal(t.sent.filter(x=>x.type==='command').length,1,'photo timeout never retries shutter');
+  t.controller.destroy();checked++;
+}
+{
+  const t=setup();t.controller.show();t.status({cameraMode:5,canStart:false,canStop:false});
+  assert.equal(t.view().photoEnabled,false);assert.equal(t.controller.command('photo'),false,'old phone without canPhoto stays read-only');
+  t.controller.destroy();checked++;
+}
 console.log(`PASS: ${checked} controller integration scenarios; no camera command retries.`);

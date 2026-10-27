@@ -86,6 +86,11 @@ page.applyState({phoneConnected:true,cameraReady:true,gpsEnabled:true,gpsState:'
 assert.equal(page.gpsIcon,'/common/ui/gps-error.png');
 page.applyState({phoneConnected:true,cameraReady:true,gpsEnabled:true,gpsState:'ready',recordPhase:'idle',canStart:true,canStop:false});
 assert.equal(page.gpsIcon,'/common/ui/gps-on.png');
+connect.onmessage({data:JSON.stringify({v:1,type:'status',camera:'ready',recording:null,canControl:false,canStart:false,canStop:false,canPhoto:true,cameraMode:5,busy:false,session:'s',seq:3,revision:3,ticket:'photo-ticket'})});
+assert.equal(page.photoEnabled,true);assert.equal(page.captureIcon,'/common/ui/capture-photo.png');assert.equal(page.timerText,'拍照');
+page.startCapturePress();assert.equal(sent.filter(x=>x.type==='command'&&x.action==='photo').length,1);
+assert.equal(page.timerText,'拍摄中');
+page.startCapturePress();assert.equal(sent.filter(x=>x.type==='command'&&x.action==='photo').length,1);
 page.onHide();assert.equal(timers.size,0);
 assert.equal(page.temperatureText,'—');assert.equal(page.temperatureIcon,'/common/ui/temperature-off.png');
 assert.equal(page.remainingText,'—');assert.equal(page.videoFormatText,'—');
