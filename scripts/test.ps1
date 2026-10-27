@@ -17,6 +17,7 @@ try{
   Checked 'javac' @('--release','8','-encoding','UTF-8','-d',$classes,('@'+$argFile))
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.DjiProtocolSelfTest','tests/connect_cmd_frame.txt')
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.CameraTelemetryTest')
+  Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.DjiCaptureActionTest')
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.DjiSessionTransitionTest')
   Checked 'java' @('-cp',$classes,'cn.local.actionrelay.protocol.GpsProtocolTest')
   Checked 'java' @('-cp',$classes,'FrameQueueTest')

@@ -11,7 +11,7 @@ Action Relay 由两部分组成：
 
 Android 字节码目标使用 `javac --release 8`；这表示字节码兼容目标，不表示
 必须使用旧版 JDK。Android `targetSdk` 保持 36，以维持现有权限和运行行为
-契约。手表包的版本与 Android manifest 保持 `0.4.3` / versionCode `12`。
+契约。手表包的版本与 Android manifest 保持 `0.4.4` / versionCode `13`。
 
 ## 云端构建与签名
 

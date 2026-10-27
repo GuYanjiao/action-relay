@@ -53,6 +53,7 @@ export default {
     captureClass: 'capture capture-reconnect',
     captureImageClass: 'capture-image capture-refresh',
     refreshMode: true,
+    photoEnabled: false,
     startEnabled: false,
     stopEnabled: false,
     pressProgress: 0,
@@ -88,6 +89,7 @@ export default {
     this.phoneText = state.phoneText || '手机：未连接'
     this.cameraText = state.cameraText || '相机：未连接'
     this.noteText = state.noteText || '状态以相机回报为准'
+    this.photoEnabled = state.photoEnabled === true
     this.startEnabled = state.startEnabled === true
     this.stopEnabled = state.stopEnabled === true
     this.remainingText = remainingLabel(state.remainingSeconds)
@@ -98,7 +100,7 @@ export default {
     var camera = state.cameraReady === true
     var recording = state.recording === true
     var phase = state.recordPhase || 'unknown'
-    var pending = state.pending === true || phase === 'starting' || phase === 'stopping'
+    var pending = state.pending === true || phase === 'starting' || phase === 'stopping' || phase === 'switching' || phase === 'capturing'
     this.refreshMode = (!phone || !camera) && !pending
     this.captureClass = this.refreshMode ? 'capture capture-reconnect' : 'capture'
     this.captureImageClass = this.refreshMode ? 'capture-image capture-refresh' : 'capture-image'
@@ -108,10 +110,11 @@ export default {
     var gps = state.gpsState || 'off'
     this.gpsIcon = '/common/ui/gps-' + (!state.gpsEnabled ? 'off' : gps === 'ready' ? 'on' : gps === 'denied' || gps === 'provider_off' || gps === 'unavailable' ? 'error' : 'wait') + '.png'
     var seconds = typeof state.recordSeconds === 'number' && state.recordSeconds >= 0 ? Math.floor(state.recordSeconds) : 0
-    this.timerText = !camera || phase === 'unknown' ? '--:--' : this.timeText(recording ? seconds : 0)
+    this.timerText = state.cameraMode === 5 ? (pending ? '拍摄中' : '拍照') : !camera || phase === 'unknown' ? '--:--' : this.timeText(recording ? seconds : 0)
     this.timerClass = recording ? 'timer timer-recording' : 'timer'
     if (this.refreshMode) this.captureIcon = '/common/ui/refresh.png'
     else if (this.stopEnabled) this.captureIcon = '/common/ui/capture-stop.png'
+    else if (this.photoEnabled) this.captureIcon = '/common/ui/capture-photo.png'
     else if (this.startEnabled) this.captureIcon = '/common/ui/capture-record.png'
     else this.captureIcon = '/common/ui/capture-' + (pending ? 'pending' : 'disabled') + '.png'
   },
@@ -148,6 +151,9 @@ export default {
     if (this.refreshMode) { this.refreshStatus(); return }
     if (this.stopEnabled) {
       if (this._hold && this._hold.start()) this.playFeedback('long')
+    } else if (this.photoEnabled && this._relay) {
+      this.playFeedback('short')
+      this._relay.command('photo')
     } else if (this.startEnabled && this._relay) {
       this.playFeedback('short')
       this._relay.command('start')

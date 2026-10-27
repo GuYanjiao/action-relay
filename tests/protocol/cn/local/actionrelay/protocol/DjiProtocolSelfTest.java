@@ -24,7 +24,7 @@ public final class DjiProtocolSelfTest {
         return DjiProtocol.frame(0,0x19,2,sequence,payload);
     }
     private static byte[] cameraStatus(int state) {
-        byte[] payload = new byte[38]; payload[0]=1; payload[1]=(byte)state; payload[5]=17; payload[37]=87;
+        byte[] payload = new byte[38]; payload[0]=1; payload[1]=(byte)state; payload[5]=17; payload[29]=1; payload[37]=87;
         return DjiProtocol.frame(0x1d,2,0,55,payload);
     }
 

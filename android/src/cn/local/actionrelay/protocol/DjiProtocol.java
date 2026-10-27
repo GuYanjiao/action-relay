@@ -121,6 +121,14 @@ public final class DjiProtocol {
         return frame(0x1d, 3, CMD_OPTIONAL_RESPONSE, sequence, payload);
     }
 
+    public static byte[] switchMode(int sequence, int mode) {
+        if (mode != 1 && mode != 5) throw new IllegalArgumentException("Only normal video/photo supported");
+        byte[] payload = new byte[9];
+        put32(payload, 0, RECORD_CONTROL_DEVICE_ID);
+        payload[4] = (byte)mode;
+        return frame(0x1d, 4, CMD_OPTIONAL_RESPONSE, sequence, payload);
+    }
+
     public static final class Frame {
         public final int commandType, sequence, commandSet, commandId;
         public final byte[] payload;
@@ -186,7 +194,7 @@ public final class DjiProtocol {
         public final int mode, cameraState, recordingSeconds, batteryPercent, temperatureState;
         public final int powerMode, nextMode;
         public final int videoResolution, fpsIndex;
-        public final long remainingCapacityMb, remainingRecordSeconds;
+        public final long remainingCapacityMb, remainingRecordSeconds, remainingPhotos;
         public final long receivedAtMs;
         CameraStatus(byte[] payload, long nowMs) {
             mode = u8(payload[0]); cameraState = u8(payload[1]);
@@ -196,6 +204,8 @@ public final class DjiProtocol {
             remainingCapacityMb = capacity == 0xffffffffL ? -1 : capacity;
             long remaining = payload.length >= 27 ? u32(payload,23) : -1;
             remainingRecordSeconds = remaining == 0xffffffffL ? -1 : remaining;
+            long photos = payload.length >= 23 ? u32(payload,19) : -1;
+            remainingPhotos = photos == 0xffffffffL ? -1 : photos;
             powerMode = payload.length > 28 ? u8(payload[28]) : -1;
             nextMode = payload.length > 29 ? u8(payload[29]) : -1;
             temperatureState = payload.length > 30 ? u8(payload[30]) : -1;

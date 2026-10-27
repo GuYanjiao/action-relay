@@ -33,6 +33,16 @@ public final class DjiSession {
     private long handshakeDeadline, statusGeneration, revision;
     private DjiProtocol.CameraStatus status;
     private Pending pending, recovery;
+    private CaptureAction captureAction;
+    private static final class CaptureAction {
+        final String id;
+        final boolean photo;
+        final long deadline;
+        int sequence;
+        boolean switching, acked, sawCapture;
+        long ackGeneration, baselinePhotos;
+        CaptureAction(String id, boolean photo, long now) { this.id=id; this.photo=photo; deadline=now+(photo?30000:8000); }
+    }
     private long recoveryDeadline, lastStatusRecoveryAt;
     private boolean staleLogged;
     private int lastKnownMode = -1;
@@ -68,21 +78,24 @@ public final class DjiSession {
     public DjiProtocol.CameraStatus getStatus() { return status; }
     public long getStatusAgeMs() { return status == null ? Long.MAX_VALUE : Math.max(0, clock.nowMs() - status.receivedAtMs); }
     public long getRevision() { return revision; }
-    public boolean isBusy() { return pending != null; }
+    public boolean isBusy() { return pending != null || captureAction != null; }
     public Boolean getPendingDesired() {
         return pending != null ? Boolean.valueOf(pending.desired)
                 : recovery != null ? Boolean.valueOf(recovery.desired) : null;
     }
     public String getCommandPhase() {
+        if (captureAction != null) return captureAction.switching ? "switching" : "capturing";
         return pending != null ? (pending.desired ? "starting" : "stopping")
                 : recovery != null ? "recovering" : "idle";
     }
     public boolean canStartRecording() {
         return isReady() && pending == null && recovery == null && status != null
-                && getStatusAgeMs() <= STATUS_FRESH_MS && status.isExplicitlyStopped();
+                && captureAction == null && getStatusAgeMs() <= STATUS_FRESH_MS && !status.isModeTransition()
+                && status.temperatureState < 2 && (status.isExplicitlyStopped() || (status.mode == 1 && status.cameraState == 2));
     }
     public boolean canStopRecording() {
         if (!isReady() || lastKnownMode != 1) return false;
+        if (captureAction != null) return !captureAction.photo;
         if (pending != null) return pending.desired;
         if (recovery != null) return true;
         return status != null && getStatusAgeMs() <= STATUS_FRESH_MS && status.isRecording();
@@ -91,7 +104,7 @@ public final class DjiSession {
 
     public void startHandshake(boolean firstPairing, int verificationCode) {
         if ("handshaking".equals(phase) || isReady()) { listener.onLog("连接流程已在进行，未重复请求"); return; }
-        phase = "handshaking"; status = null; pending = recovery = null; lastKnownMode = -1;
+        phase = "handshaking"; status = null; pending = recovery = null; captureAction = null; lastKnownMode = -1;
         decoder.reset(); staleLogged = false; revision++;
         listener.onReady(false);
         handshakeSequence = nextSequence();
@@ -152,12 +165,22 @@ public final class DjiSession {
             status = DjiProtocol.cameraStatus(frame, clock.nowMs());
             statusGeneration++; revision++; lastKnownMode = status.mode; staleLogged = false;
             listener.onStatus(status);
+            if (captureAction != null) observeCapture();
             if (pending != null) observeTarget(pending, false);
             else if (recovery != null) {
                 if (clock.nowMs() >= recoveryDeadline) { recovery = null; revision++; }
                 else observeTarget(recovery, true);
             }
             return;
+        }
+        if (captureAction != null && frame.isResponse() && frame.sequence == captureAction.sequence &&
+                frame.is(0x1d, captureAction.switching ? 4 : 3)) {
+            if (frame.payload.length < 1) return;
+            if (DjiProtocol.u8(frame.payload[0]) != 0) {
+                finishCapture("failed", "相机拒绝切换或拍照，返回码 " + DjiProtocol.u8(frame.payload[0])); return;
+            }
+            captureAction.acked = true; captureAction.ackGeneration = statusGeneration;
+            revision++; return;
         }
         if (frame.is(0x1d, 3) && frame.isResponse()) {
             Pending operation = pending != null && frame.sequence == pending.sequence ? pending
@@ -187,8 +210,62 @@ public final class DjiSession {
         result(operation, "confirmed", (late ? "相机迟到回报：" : "")
                 + (operation.desired ? "已确认开始录像" : "已确认停止录像"));
     }
+    public boolean canTakePhoto() {
+        return isReady() && pending == null && recovery == null && captureAction == null && status != null
+                && getStatusAgeMs() <= STATUS_FRESH_MS && status.mode == 5 && !status.isModeTransition()
+                && (status.cameraState == 1 || status.cameraState == 2) && status.temperatureState < 2;
+    }
+    public boolean takePhoto(String id) {
+        if (id == null || id.length() == 0) throw new IllegalArgumentException("requestId required");
+        if (!canTakePhoto()) { listener.onCommandResult(id,true,"rejected","相机拍照未就绪"); return false; }
+        return beginCapture(id,true,status.cameraState == 2);
+    }
+    private boolean beginCapture(String id, boolean photo, boolean switching) {
+        CaptureAction action = new CaptureAction(id,photo,clock.nowMs());
+        captureAction=action; action.switching=switching; revision++;
+        return sendCapture(action);
+    }
+    private boolean sendCapture(CaptureAction action) {
+        action.sequence=nextSequence(); action.acked=false; action.ackGeneration=statusGeneration;
+        action.baselinePhotos=status == null ? -1 : status.remainingPhotos;
+        try { transport.send(action.switching ? DjiProtocol.switchMode(action.sequence,action.photo?5:1)
+                : DjiProtocol.recording(action.sequence,true)); }
+        catch (Exception error) { if(captureAction==action)finishCapture("unknown","拍摄命令发送未确认，不会重发："+safeMessage(error)); return false; }
+        return captureAction==action && isReady();
+    }
+    private void observeCapture() {
+        CaptureAction action=captureAction;
+        if(action==null)return;
+        if(clock.nowMs()>=action.deadline){finishCapture("unknown","切换或拍照结果未确认，不会重发");return;}
+        if(status.mode!=(action.photo?5:1)) { finishCapture("unknown","相机模式已改变，已取消待执行拍摄");return; }
+        if(status.temperatureState>=2){finishCapture("rejected","相机过热，已取消待执行拍摄");return;}
+        if(action.switching) {
+            if(!action.acked || statusGeneration<=action.ackGeneration || status.cameraState!=1 || status.isModeTransition())return;
+            if(!action.photo) {
+                captureAction=null; revision++;
+                setRecording(true,action.id); // only after a post-ACK live-view state; exactly one start
+            } else { action.switching=false; revision++; sendCapture(action); }
+        } else {
+            if(status.cameraState==3)action.sawCapture=true;
+            boolean countChanged=action.baselinePhotos>0 && status.remainingPhotos>=0 && status.remainingPhotos<action.baselinePhotos;
+            if(action.acked && statusGeneration>action.ackGeneration && status.cameraState==1 && (action.sawCapture || countChanged))
+                finishCapture("confirmed","相机状态已确认拍照完成");
+        }
+    }
+    private void finishCapture(String outcome,String message) {
+        CaptureAction action=captureAction; captureAction=null; revision++;
+        if(action!=null)listener.onCommandResult(action.id,true,outcome,message);
+    }
     public boolean setRecording(boolean desired, String requestId) {
         if (requestId == null || requestId.length() == 0) throw new IllegalArgumentException("requestId required");
+        if(captureAction!=null) {
+            if(!desired && !captureAction.photo) {
+                finishCapture("unknown","已取消待执行的开始录像，不会自动重发");
+                if(status==null || !status.isRecording()) {
+                    listener.onCommandResult(requestId,false,"unknown","开始准备已取消，请以相机当前状态为准");return true;
+                }
+            } else { listener.onCommandResult(requestId,desired,"rejected","上一拍摄请求仍在确认");return false; }
+        }
         if (pending != null && pending.desired == desired) {
             if (!pending.requestIds.contains(requestId)) pending.requestIds.add(requestId);
             listener.onLog(desired ? "开始请求仍在确认，未重复发送" : "停止请求仍在确认，未重复发送");
@@ -206,6 +283,7 @@ public final class DjiSession {
                     desired ? "相机未就绪、状态过期或另一请求尚待确认" : "当前没有可停止的已知录像或未决开始请求");
             return false;
         }
+        if(desired && status.cameraState==2) return beginCapture(requestId,false,true);
         boolean coversStart = !desired && ((pending != null && pending.desired)
                 || (recovery != null && recovery.desired));
         boolean supersededWhilePending = pending != null;
@@ -227,6 +305,7 @@ public final class DjiSession {
         return true;
     }
     public void tick(long nowMs) {
+        if(captureAction!=null && nowMs>=captureAction.deadline)finishCapture("unknown","切换或拍照结果未确认，不会重发");
         if ("handshaking".equals(phase) && nowMs >= handshakeDeadline) {
             failHandshake("等待相机授权超时，请在相机上确认后重新连接"); return;
         }
@@ -244,7 +323,7 @@ public final class DjiSession {
         if (recovery != null && nowMs >= recoveryDeadline) {
             recovery = null; revision++; listener.onLog("迟到确认窗口已结束，请以相机最新状态为准");
         }
-        if (isReady() && (pending != null || recovery != null)
+        if (isReady() && (pending != null || recovery != null || captureAction != null)
                 && getStatusAgeMs() > STATUS_RECOVERY_INTERVAL_MS
                 && nowMs - lastStatusRecoveryAt >= STATUS_RECOVERY_INTERVAL_MS) {
             lastStatusRecoveryAt = nowMs;
@@ -260,13 +339,14 @@ public final class DjiSession {
     }
     public void disconnect() {
         phase = "disconnected";
+        if(captureAction!=null)finishCapture("unknown","连接已断开，未确认拍摄不会重发");
         Pending interrupted = pending; pending = recovery = null;
         status = null; lastKnownMode = -1; decoder.reset(); revision++;
         if (interrupted != null) result(interrupted, "unknown", "连接已断开，录像结果未确认；不会重发旧指令");
         listener.onReady(false);
     }
     private void failHandshake(String reason) {
-        phase = "failed"; status = null; lastKnownMode = -1; decoder.reset(); revision++;
+        phase = "failed"; if(captureAction!=null)finishCapture("unknown","授权已失效，未确认拍摄不会重发"); status = null; lastKnownMode = -1; decoder.reset(); revision++;
         listener.onReady(false); listener.onLog(reason); listener.onDisconnectRequired(reason);
     }
     private void result(Pending operation, String outcome, String message) {

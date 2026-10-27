@@ -119,7 +119,7 @@ public final class RelayHub {
                 changed();
             }
             public void onStatus(DjiProtocol.CameraStatus status){
-                if(!busy) message=!status.isNormalVideoMode()?"请将相机设为普通视频模式":!status.isControllableState()?"相机暂不可控，状态码 "+status.cameraState:status.isRecording()?"相机正在录像":status.isPreRecording()?"相机处于预录缓存":"相机已待机";
+                if(!busy) message=status.mode==5?"相机处于拍照模式":status.cameraState==2?"点击拍摄可尝试退出回放":!status.isNormalVideoMode()?"请将相机设为普通视频或拍照模式":!status.isControllableState()?"相机暂不可控，状态码 "+status.cameraState:status.isRecording()?"相机正在录像":status.isPreRecording()?"相机处于预录缓存":"相机已待机";
                 if(!controlKey().equals(lastPublishedControl)||SystemClock.elapsedRealtime()-lastPublish>500)publish();changed();
             }
             public void onLog(String line){log(line);}
@@ -280,23 +280,33 @@ public final class RelayHub {
         return json("v",1,"type","status","seq",++statusSeq,"session",epoch,"ticket",ticket,
             "camera",enabled?phase:"disconnected","recording",recording,
             "canControl",enabled&&session.canControlRecording(),"canStart",enabled&&session.canStartRecording(),
-            "canStop",enabled&&session.canStopRecording(),"busy",session.isBusy(),"pendingDesired",pending==null?JSONObject.NULL:pending,
+            "canPhoto",enabled&&session.canTakePhoto(),"canStop",enabled&&session.canStopRecording(),"busy",session.isBusy(),"pendingDesired",pending==null?JSONObject.NULL:pending,
             "recordPhase",commandPhase,"watchConnected",bridge.isWatchConnected(),"gpsState",gpsState,"gpsEnabled",gpsEnabled,
             "battery",fresh?s.batteryPercent:-1,"recordSeconds",fresh?s.recordingSeconds:-1,"gpsMessage",gpsMessage,"message",detail,
             "storageMb",fresh?s.remainingCapacityMb:-1,"cameraMode",fresh?s.mode:-1,
             "remainingSeconds",fresh?s.remainingRecordSeconds:-1,
-            "temperatureState",fresh?s.temperatureState:-1,
+            "temperatureState",fresh?s.temperatureState:-1,"cameraState",fresh?s.cameraState:-1,
             "videoResolution",fresh?s.videoResolution:-1,"fpsIndex",fresh?s.fpsIndex:-1,
             "revision",session.getRevision());
     }
     private String controlKey(){
         DjiProtocol.CameraStatus status=session.getStatus();
         return phase+":"+session.getCommandPhase()+":"+session.canStartRecording()+":"+session.canStopRecording()
-            +":"+(status==null?-1:status.cameraState);
+            +":"+session.canTakePhoto()+":"+(status==null?-1:status.cameraState);
     }
     private void publish(){if(session==null||bridge==null)return;newTicket();lastPublish=SystemClock.elapsedRealtime();lastPublishedControl=controlKey();sendWatch(snapshot());}
     private void sendWatch(JSONObject object){if(enabled&&bridge!=null)bridge.send(object.toString());}
     public void phoneCommand(boolean start){command(start,"phone-"+UUID.randomUUID());}
+    private void photoCommand(String id){
+        if(!enabled || !session.canTakePhoto()){reject(id,"相机拍照未就绪");return;}
+        busy=true;activeRequest=id;commandStarts.put(id,SystemClock.elapsedRealtime());message="正在请求拍照";
+        ble.setControlPriority(true);session.takePhoto(id);
+        if(id.equals(activeRequest)) {
+            JSONObject accepted=json("v",1,"type","result","id",id,"ok",false,"phase","accepted","message",message,"session",epoch,"revision",session.getRevision());
+            rememberResult(id,accepted);sendWatch(accepted);
+        }
+        changed();
+    }
     private void command(boolean desired,String id){
         if(!enabled || (desired?!session.canStartRecording():!session.canStopRecording())){reject(id,"相机未就绪，或当前状态不允许此操作");return;}
         busy=true;activeRequest=id;commandStarts.put(id,SystemClock.elapsedRealtime());message=desired?"正在请求开始录像":"正在请求停止录像";
@@ -319,10 +329,10 @@ public final class RelayHub {
             if(id.length()<1||id.length()>64)return;
             JSONObject existing=results.get(id);if(existing!=null){sendWatch(existing);publish();return;}
             String action=request.optString("action","");
-            if(!"start".equals(action)&&!"stop".equals(action)){reject(id,"不支持的操作");return;}
+            if(!"start".equals(action)&&!"stop".equals(action)&&!"photo".equals(action)){reject(id,"不支持的操作");return;}
             Long issued=tickets.get(request.optString("ticket",""));
             if(!epoch.equals(request.optString("session",""))||issued==null||SystemClock.elapsedRealtime()-issued>6000){reject(id,"指令凭据已过期，请等状态更新后重新点击");return;}
-            command("start".equals(action),id);
+            if("photo".equals(action))photoCommand(id);else command("start".equals(action),id);
         }catch(Exception error){log("手表消息格式不符，未执行");}
     }
     private void reject(String id,String detail){
