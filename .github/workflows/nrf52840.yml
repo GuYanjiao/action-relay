@@ -30,6 +30,11 @@ jobs:
         run: |
           gcc -std=c11 -Wall -Wextra -Werror firmware/nrf52840/probe/tests/hr_test.c -o "$RUNNER_TEMP/hr-test"
           "$RUNNER_TEMP/hr-test"
+      - name: Test authentication calculations with synthetic vectors
+        run: |
+          python firmware/nrf52840/protocol/tests/vectors.py
+          gcc -std=c11 -Wall -Wextra -Werror firmware/nrf52840/protocol/miwear_auth.c firmware/nrf52840/protocol/tests/auth_test.c -lcrypto -o "$RUNNER_TEMP/auth-test"
+          "$RUNNER_TEMP/auth-test"
       - name: Install Zephyr host tools
         run: |
           sudo apt-get update -qq

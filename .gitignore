@@ -20,3 +20,5 @@ local.*
 *.zip
 **/.temp_*/
 .temp_*/
+
+firmware/nrf52840/protocol/tests/vectors.h
