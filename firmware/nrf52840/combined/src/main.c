@@ -25,6 +25,7 @@
 #include "activity.h"
 #include "radio_scan.h"
 #include "watch_diag.h"
+#include "camera_diag.h"
 #include "../../protocol/miwear_psa.h"
 
 LOG_MODULE_REGISTER(relay, LOG_LEVEL_INF);
@@ -71,7 +72,7 @@ static void usb_bootloader_check(void)
         } else if (command == '\r' || command == '\n') {
             if (length && !discard) {
                 line[length] = 0;
-                if (!watch_diag_command(line)) LOG_WRN("Unknown USB command");
+                if (!camera_diag_command(line, k_uptime_get_32()) && !watch_diag_command(line)) LOG_WRN("Unknown USB command");
             }
             length = 0; discard = false;
         } else if (!discard) {
@@ -459,6 +460,7 @@ int main(void)
     radio_scan_init();
     radio_scan_register(RADIO_HEART, scan_result);
     watch_diag_init();
+    camera_diag_init();
     err = cadence_setup();
     if (err) startup_error("Cadence RX", err);
     LOG_INF("Standby: waiting for crank motion; BLE search budget %u seconds", ACTIVITY_SEARCH_MS / 1000);
@@ -479,6 +481,7 @@ int main(void)
         }
         if (atomic_get(&ant_overflow)) { LOG_ERR("ANT event overflow"); k_oops(); }
         int64_t now = k_uptime_get();
+        camera_diag_poll((uint32_t)now);
         k_spinlock_key_t key = k_spin_lock(&sample_lock);
         bool fresh = sample.valid && now - sample.received < STALE_MS;
         int64_t hr_received = sample.received;

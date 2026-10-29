@@ -49,3 +49,9 @@ watch disconnect
 配套描述中的 CCM 与后续应用 L2 加密应分别核对：固定 Core 源码的认证描述使用 CCM，而应用 `V2L2Cipher` 使用 CTR，不能把当前 CCM helper 直接套到应用消息上。仍待真实会话验证，不提供加密失败后的明文降级。
 
 现已增加应用 PB 编解码及 L2 包装模块：PB 信道 1、认证 write=1、应用 encrypted-write=2。应用收发仅在认证状态 READY 时允许，使用方向对应的会话密钥与参考实现一致的 CTR IV；不是 CCM，也没有明文降级。CTR 不提供完整性保护，后续仍需验证 PB、应用包名/指纹、会话和命令票据。参照固定版本的 [L2 格式](https://github.com/AstralSightStudios/AstroBox-NG-Module-Core/blob/dc08a079501b3ca7dd9215727ccbc348278914fc/src/device/xiaomi/packet/v2/layer2.rs)与 [方向密钥/IV](https://github.com/AstralSightStudios/AstroBox-NG-Module-Core/blob/dc08a079501b3ca7dd9215727ccbc348278914fc/src/device/xiaomi/packet/cipher.rs)，未接入实机 GATT 收发。
+
+## 相机侧发现（只读）
+
+新增 USB 行命令 `camera scan` / `camera stop`。复用共享扫描调度器 RADIO_CAMERA，扫描最多 10 秒，最多打印 8 个不同地址的候选，相机侧停止不会撤销心率/手表的扫描请求。候选匹配沿用 Android `DjiBle.isDji` 的厂商广播字段；名称只供辨认，候选不等于已确认型号或获得授权。本阶段没有相机连接、配对、GATT 写入或快门行为，尚未刷入板上。
+
+完整接入将依次验证 FFF0 服务、FFF4 通知、FFF5 写入，再移植现有 DjiSession 的 0x00/0x19 授权握手。新开发板控制器需要独立、可持久化的 controllerId 与六字节身份，不能借用手机身份伪装已授权；只在相机明确授权成功后保存设备及授权成功标记。已授权重连仍需握手，未获准自动选定附近其他相机。
