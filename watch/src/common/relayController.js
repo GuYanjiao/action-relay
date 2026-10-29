@@ -186,6 +186,9 @@ export function createRelayController(options) {
       if (retiredSessions.indexOf(packet.session) >= 0) return;
       var kind = packetKind(packet);
       if (!kind) return;
+      if (lastSession && lastSession !== packet.session && !hasTokens(packet)) return;
+      if (packet.seq !== undefined && !NumberIsInteger(packet.seq)) return;
+      if (packet.revision !== undefined && !NumberIsInteger(packet.revision)) return;
       if (kind === 'nrf52840' && (!hasTokens(packet) || !NumberIsInteger(packet.seq) || !NumberIsInteger(packet.revision))) return;
       if (!Object.prototype.hasOwnProperty.call(cameraNames, packet.camera)) return;
       if (packet.recording !== null && typeof packet.recording !== 'boolean') return;

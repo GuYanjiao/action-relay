@@ -252,4 +252,14 @@ console.log(`PASS: ${checked} controller integration scenarios; no camera comman
   assert.equal(t.view().startEnabled,false);assert.equal(t.view().relayConnected,false);
   t.controller.destroy();checked++;
 }
+{
+  const t=setup();t.controller.show();t.status();t.controller.command('start');
+  t.status({session:undefined,ticket:undefined,recording:true});
+  assert.equal(t.view().pending,true,'tokenless legacy packet cannot replace an identified peer');
+  t.status({seq:-1});assert.equal(t.view().pending,true);
+  t.status({seq:NaN});assert.equal(t.view().pending,true);
+  t.status({seq:100,revision:1.5,recording:true});assert.equal(t.view().recording,false);
+  t.status({seq:2,recording:true});assert.equal(t.view().recording,true,'invalid sequence did not poison ordering');
+  t.controller.destroy();checked++;
+}
 console.log(`PASS: ${checked} total scenarios including companion identity, ping and lifecycle isolation.`);
