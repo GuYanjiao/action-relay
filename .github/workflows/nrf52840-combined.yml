@@ -1,4 +1,4 @@
-name: nRF52840 combined baseline
+name: nRF52840 combined relay
 
 on:
   workflow_dispatch:
@@ -29,6 +29,8 @@ jobs:
         run: |
           gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/nrf52840/combined/tests/fakes firmware/nrf52840/combined/tests/radio_scan_test.c -o "$RUNNER_TEMP/radio-scan-test"
           "$RUNNER_TEMP/radio-scan-test"
+          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/nrf52840/combined/tests/fakes firmware/nrf52840/combined/tests/watch_diag_test.c -o "$RUNNER_TEMP/watch-diag-test"
+          "$RUNNER_TEMP/watch-diag-test"
   combined:
     needs: coordination-tests
     runs-on: ubuntu-24.04
@@ -73,11 +75,12 @@ jobs:
           import json, os, pathlib, subprocess
           root=pathlib.Path(os.environ['RUNNER_TEMP'])
           revision=lambda p: subprocess.check_output(['git','rev-parse','HEAD'],cwd=p,text=True).strip()
-          meta={'phase':'combined-baseline','commit':os.environ['GITHUB_SHA'],
+          meta={'phase':'combined-readonly-diagnostics','commit':os.environ['GITHUB_SHA'],
                 'board':'promicro_nrf52840/nrf52840/uf2','ncs':'3.2.4','ant':'2.1.1',
                 'ncsCommit':revision(root/'ncs/nrf'),'antCommit':revision(root/'ant'),
                 'hardwareTested':False,'cameraControlImplemented':False,
-                'authenticationImplemented':False,'heartRateBaselineRetained':True}
+                'authenticationImplemented':False,'heartRateBaselineRetained':True,
+                'watchDiagnosticsImplemented':True}
           pathlib.Path('build-info.json').write_text(json.dumps(meta,indent=2)+'\n')
           PY
       - uses: actions/upload-artifact@v7.0.2

@@ -5,6 +5,8 @@
 #include <stdint.h>
 #define ARG_UNUSED(x) (void)(x)
 #define BIT(x) (1U << (x))
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define K_NO_WAIT 0
 #define K_MSEC(x) (x)
 typedef int atomic_t;

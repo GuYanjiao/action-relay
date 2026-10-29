@@ -1,7 +1,19 @@
 #ifndef RADIO_TEST_BLUETOOTH_H
 #define RADIO_TEST_BLUETOOTH_H
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 typedef struct { uint8_t type, a[6]; } bt_addr_le_t;
+#define BT_ADDR_LE_PUBLIC 0
+#define BT_ADDR_LE_RANDOM 1
+#define BT_ADDR_LE_STR_LEN 40
+int bt_addr_from_str(const char *, void *);
+int bt_addr_le_to_str(const bt_addr_le_t *, char *, size_t);
+struct bt_data { uint8_t type, data_len; uint8_t *data; };
+#define BT_DATA_NAME_COMPLETE 9
+#define BT_DATA_NAME_SHORTENED 8
+#define BT_DATA_UUID16_ALL 3
+#define BT_DATA_UUID16_SOME 2
 struct net_buf_simple { uint8_t *data; uint16_t len; };
 struct net_buf_simple_state { uint8_t *data; uint16_t len; };
 static inline void net_buf_simple_save(struct net_buf_simple *b, struct net_buf_simple_state *s)
@@ -17,4 +29,5 @@ struct bt_le_scan_param { int type, interval, window; };
 void bt_le_scan_cb_register(struct bt_le_scan_cb *);
 int bt_le_scan_start(const struct bt_le_scan_param *, void *);
 int bt_le_scan_stop(void);
+void bt_data_parse(struct net_buf_simple *, bool (*)(struct bt_data *, void *), void *);
 #endif
