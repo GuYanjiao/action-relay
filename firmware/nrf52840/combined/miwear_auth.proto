@@ -1,0 +1,38 @@
+// Minimal wire schema for authentication of an already-bound device.
+// Field-number evidence: AstroBox Pb 03a92010056dd41af114f6f46fd612104b27bd7b.
+// Intentionally contains no bind, unbind, account-login or installation commands.
+syntax = "proto2";
+package actionrelay;
+message AuthEnvelope {
+    required uint32 type = 1;
+    required uint32 id = 2;
+    optional AuthAccount account = 3;
+}
+message AuthAccount {
+    oneof payload {
+        uint32 error_code = 3;
+        AppVerify app_verify = 30;
+        DeviceVerify device_verify = 31;
+        AppConfirm app_confirm = 32;
+        DeviceConfirm device_confirm = 33;
+    }
+}
+message AppVerify { required bytes app_random = 1; }
+message DeviceVerify {
+    required bytes device_random = 1;
+    required bytes device_sign = 2;
+}
+message AppConfirm {
+    required bytes app_sign = 1;
+    required bytes encrypted_companion = 2;
+}
+message DeviceConfirm {
+    required bool confirmed = 1;
+    optional uint32 capability = 2;
+    optional uint32 capability_2 = 3;
+}
+message CompanionDevice {
+    required uint32 device_type = 1;
+    required string device_name = 3;
+    optional uint32 capability = 4;
+}

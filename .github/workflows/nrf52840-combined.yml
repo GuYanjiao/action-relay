@@ -38,10 +38,23 @@ jobs:
       - name: Check PSA HMAC and CCM against independent implementations
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends libmbedtls-dev
+          sudo apt-get install -y --no-install-recommends libmbedtls-dev protobuf-compiler python3-protobuf
           python firmware/nrf52840/protocol/tests/vectors.py
           gcc -std=c11 -Wall -Wextra -Werror firmware/nrf52840/protocol/miwear_auth.c firmware/nrf52840/protocol/miwear_psa.c firmware/nrf52840/protocol/tests/psa_test.c -lmbedcrypto -lcrypto -o "$RUNNER_TEMP/miwear-psa-test"
           "$RUNNER_TEMP/miwear-psa-test"
+      - name: Check bounded authentication Protobuf messages
+        run: |
+          NB="$RUNNER_TEMP/nanopb"
+          GEN="$RUNNER_TEMP/miwear-pb"
+          git init "$NB"
+          git -C "$NB" remote add origin https://github.com/zephyrproject-rtos/nanopb
+          git -C "$NB" fetch --depth 1 origin 7307ce399b81ddcb3c3a5dc862c52d4754328d38
+          git -C "$NB" checkout --detach FETCH_HEAD
+          mkdir -p "$GEN"
+          cd "$GITHUB_WORKSPACE/firmware/nrf52840/combined"
+          /usr/bin/python3 "$NB/generator/nanopb_generator.py" -I . -D "$GEN" miwear_auth.proto
+          gcc -std=c11 -Wall -Wextra -Werror -I"$NB" -I"$GEN" src/miwear_pb.c tests/miwear_pb_test.c "$GEN/miwear_auth.pb.c" "$NB/pb_common.c" "$NB/pb_encode.c" "$NB/pb_decode.c" -o "$RUNNER_TEMP/miwear-pb-test"
+          "$RUNNER_TEMP/miwear-pb-test"
   combined:
     needs: coordination-tests
     runs-on: ubuntu-24.04
@@ -58,6 +71,8 @@ jobs:
           persist-credentials: false
       - name: Prepare compatible Nordic and ANT sources
         run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends protobuf-compiler
           west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.2.4 "$RUNNER_TEMP/ncs"
           cd "$RUNNER_TEMP/ncs"
           west update --narrow -o=--depth=1
@@ -80,6 +95,7 @@ jobs:
           python "$GITHUB_WORKSPACE/firmware/nrf52840/probe/check_uf2.py" "$OUTPUT/ActionRelay-Combined-Baseline.uf2" --report "$OUTPUT/partition-check.json"
           cp "$GITHUB_WORKSPACE/firmware/nrf52840/combined/README.md" "$OUTPUT/README.md"
           cp "$GITHUB_WORKSPACE/firmware/nrf52840/combined/upstream.json" "$OUTPUT/upstream.json"
+          cp -r "$GITHUB_WORKSPACE/firmware/nrf52840/combined/LICENSES" "$OUTPUT/LICENSES"
           cd "$OUTPUT"
           sha256sum *.uf2 > SHA256SUMS.txt
           python - <<'PY'
@@ -89,6 +105,7 @@ jobs:
           meta={'phase':'combined-readonly-diagnostics','commit':os.environ['GITHUB_SHA'],
                 'board':'promicro_nrf52840/nrf52840/uf2','ncs':'3.2.4','ant':'2.1.1',
                 'ncsCommit':revision(root/'ncs/nrf'),'antCommit':revision(root/'ant'),
+                'nanopbCommit':revision(root/'ncs/modules/lib/nanopb'),
                 'hardwareTested':False,'cameraControlImplemented':False,
                 'authenticationImplemented':False,'heartRateBaselineRetained':True,
                 'watchDiagnosticsImplemented':True}

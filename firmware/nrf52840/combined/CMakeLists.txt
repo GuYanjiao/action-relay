@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(action_relay_combined)
-target_sources(app PRIVATE src/main.c src/hr_measurement.c src/activity.c src/radio_scan.c src/watch_diag.c ../protocol/miwear_auth.c ../protocol/miwear_l1.c ../protocol/miwear_psa.c)
+list(APPEND CMAKE_MODULE_PATH ${ZEPHYR_BASE}/modules/nanopb)
+include(nanopb)
+zephyr_nanopb_sources(app miwear_auth.proto)
+target_sources(app PRIVATE src/main.c src/hr_measurement.c src/activity.c src/radio_scan.c src/watch_diag.c src/miwear_pb.c ../protocol/miwear_auth.c ../protocol/miwear_l1.c ../protocol/miwear_psa.c)

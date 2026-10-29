@@ -1,0 +1,6 @@
+actionrelay.AppVerify.app_random max_size:16 fixed_length:true
+actionrelay.DeviceVerify.device_random max_size:16 fixed_length:true
+actionrelay.DeviceVerify.device_sign max_size:32 fixed_length:true
+actionrelay.AppConfirm.app_sign max_size:32 fixed_length:true
+actionrelay.AppConfirm.encrypted_companion max_size:128
+actionrelay.CompanionDevice.device_name max_size:33
