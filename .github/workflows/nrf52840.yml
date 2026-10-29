@@ -30,6 +30,8 @@ jobs:
         run: |
           gcc -std=c11 -Wall -Wextra -Werror firmware/nrf52840/probe/tests/hr_test.c -o "$RUNNER_TEMP/hr-test"
           "$RUNNER_TEMP/hr-test"
+      - name: Test UF2 partition checks
+        run: python firmware/nrf52840/probe/tests/uf2_test.py
       - name: Test authentication calculations with synthetic vectors
         run: |
           python firmware/nrf52840/protocol/tests/vectors.py
@@ -60,6 +62,7 @@ jobs:
           cp "$RUNNER_TEMP/probe-build/zephyr/zephyr.elf" "$OUTPUT/ActionRelay-S4-Probe.elf"
           cp "$RUNNER_TEMP/probe-build/zephyr/.config" "$OUTPUT/zephyr.config"
           cp "$GITHUB_WORKSPACE/firmware/nrf52840/probe/README.md" "$OUTPUT/README.md"
+          python "$GITHUB_WORKSPACE/firmware/nrf52840/probe/check_uf2.py" "$OUTPUT/ActionRelay-S4-Probe.uf2" --report "$OUTPUT/partition-check.json"
           cd "$OUTPUT"
           sha256sum ActionRelay-S4-Probe.* > SHA256SUMS.txt
           python - <<'PY'
