@@ -1,0 +1,18 @@
+# Preserve the factory S140/MBR and UF2 bootloader. NCS Partition Manager
+# must match the board DTS; otherwise ELF vectors remain linked at zero.
+factory_softdevice:
+  address: 0x0
+  size: 0x26000
+  region: flash_primary
+app:
+  address: 0x26000
+  size: 0xc6000
+  region: flash_primary
+factory_storage:
+  address: 0xec000
+  size: 0x8000
+  region: flash_primary
+factory_bootloader:
+  address: 0xf4000
+  size: 0xc000
+  region: flash_primary

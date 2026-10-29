@@ -1,0 +1,13 @@
+source "Kconfig.zephyr"
+config WATCH_HR_RELAY
+    bool
+    default y
+    select ANT
+    select ANT_HRM
+    select ANT_KEY_MANAGER
+    select ANT_CHANNEL_CONFIG
+
+config CADENCE_DEVICE_NUMBER
+    int "ANT cadence device number (0 = learn first moving sensor until reboot)"
+    default 0
+    range 0 65535

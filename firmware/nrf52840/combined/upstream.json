@@ -1,0 +1,17 @@
+{
+  "repository": "https://github.com/GuYanjiao/watch-hr-ant-relay",
+  "commit": "5a5ec2d76288ab9b099c3d05ff1881d45bb6c643",
+  "sourceFilesSha256": {
+    "boards/pm_static.yml": "eb13778c20e6c18e463238388564d8b7e0d58086d6848a5a94a3c1933098e787",
+    "boards/promicro_nrf52840_nrf52840_uf2.conf": "878b748eeafa4f97cb9564ac98cee00d3cbfee73c411379ec24c9703512d481c",
+    "CMakeLists.txt": "7c27136433057efb94bc38e5f39b56abb768b28ded1f38e65332a2439a45da55",
+    "Kconfig": "1d4d4e99f1f444b1bb93d43525970331c6598cc5eec8fdf9a649fd8f65c8a4bb",
+    "prj.conf": "cc7fec00b318be77e8fafd67b7b4210dcc8d1853325396d9f7fd50af4c4fbebd",
+    "src/activity.c": "9a533230401729f1744756f2653236aafe96f545ffde95dc29ca6394594bfc88",
+    "src/activity.h": "33b69e8e88bb79376de362dff67d8b8c79388ad19903f3a2041315b4f6705ce4",
+    "src/hr_measurement.c": "f30a26c1f5b8773ab0a2895bc46fa5d9c42252df123fd30288aa6366af7f4781",
+    "src/hr_measurement.h": "07a3652382c3fa80140a14895c5c606bacb6782f0ad4cc3c8c8d101c2d128156",
+    "src/main.c": "42f715f8340f3c1237ae0c114b627f6401236d8416f499e5786ae82ab209e29e"
+  },
+  "originalRepositoryModified": false
+}

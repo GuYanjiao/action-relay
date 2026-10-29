@@ -1,0 +1,76 @@
+name: nRF52840 combined baseline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'work/**']
+    paths:
+      - 'firmware/nrf52840/combined/**'
+      - 'firmware/nrf52840/protocol/**'
+      - 'firmware/nrf52840/probe/check_uf2.py'
+      - '.github/workflows/nrf52840-combined.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nrf52840-combined-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  combined:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    container:
+      # Official v3.2.4 image, registry digest verified before adding this workflow.
+      image: ghcr.io/nrfconnect/sdk-nrf-toolchain@sha256:397bac78a3e3825ce30443d4cd28c377ea6e5a28910200820967b648d95f88bb
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare compatible Nordic and ANT sources
+        run: |
+          west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.2.4 "$RUNNER_TEMP/ncs"
+          cd "$RUNNER_TEMP/ncs"
+          west update --narrow -o=--depth=1
+          python -m pip install -r zephyr/scripts/requirements.txt -r nrf/scripts/requirements.txt
+          west zephyr-export
+          git clone --branch v2.1.1 --depth 1 https://github.com/ant-nrfconnect/sdk-ant "$RUNNER_TEMP/ant"
+      - name: Build combined baseline with retained ANT functionality
+        run: |
+          cd "$RUNNER_TEMP/ncs"
+          west build -b promicro_nrf52840/nrf52840/uf2 "$GITHUB_WORKSPACE/firmware/nrf52840/combined" -d "$RUNNER_TEMP/combined-build" -- \
+            "-DZEPHYR_EXTRA_MODULES=$RUNNER_TEMP/ant" \
+            "-DPM_STATIC_YML_FILE=$GITHUB_WORKSPACE/firmware/nrf52840/combined/boards/pm_static.yml"
+      - name: Check and package baseline firmware
+        run: |
+          OUTPUT="$RUNNER_TEMP/combined-artifact"
+          mkdir -p "$OUTPUT"
+          mapfile -t images < <(find "$RUNNER_TEMP/combined-build" -name zephyr.uf2)
+          test "${#images[@]}" -eq 1
+          cp "${images[0]}" "$OUTPUT/ActionRelay-Combined-Baseline.uf2"
+          python "$GITHUB_WORKSPACE/firmware/nrf52840/probe/check_uf2.py" "$OUTPUT/ActionRelay-Combined-Baseline.uf2" --report "$OUTPUT/partition-check.json"
+          cp "$GITHUB_WORKSPACE/firmware/nrf52840/combined/README.md" "$OUTPUT/README.md"
+          cp "$GITHUB_WORKSPACE/firmware/nrf52840/combined/upstream.json" "$OUTPUT/upstream.json"
+          cd "$OUTPUT"
+          sha256sum *.uf2 > SHA256SUMS.txt
+          python - <<'PY'
+          import json, os, pathlib, subprocess
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          revision=lambda p: subprocess.check_output(['git','rev-parse','HEAD'],cwd=p,text=True).strip()
+          meta={'phase':'combined-baseline','commit':os.environ['GITHUB_SHA'],
+                'board':'promicro_nrf52840/nrf52840/uf2','ncs':'3.2.4','ant':'2.1.1',
+                'ncsCommit':revision(root/'ncs/nrf'),'antCommit':revision(root/'ant'),
+                'hardwareTested':False,'cameraControlImplemented':False,
+                'authenticationImplemented':False,'heartRateBaselineRetained':True}
+          pathlib.Path('build-info.json').write_text(json.dumps(meta,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: nrf52840-combined-baseline-${{ github.sha }}
+          path: ${{ runner.temp }}/combined-artifact/
+          if-no-files-found: error
+          retention-days: 30
