@@ -1,0 +1,77 @@
+name: nRF52840 probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'work/**']
+    paths:
+      - 'firmware/nrf52840/**'
+      - '.github/workflows/nrf52840.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nrf52840-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Test portable heart-rate parser
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror firmware/nrf52840/probe/tests/hr_test.c -o "$RUNNER_TEMP/hr-test"
+          "$RUNNER_TEMP/hr-test"
+      - name: Install Zephyr host tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ninja-build gperf device-tree-compiler gcc-multilib g++-multilib libsdl2-dev libmagic1
+          python -m pip install west==1.5.0
+          west init --manifest-url https://github.com/zephyrproject-rtos/zephyr --manifest-rev v4.5.0 "$RUNNER_TEMP/zephyr-workspace"
+          cd "$RUNNER_TEMP/zephyr-workspace"
+          west update --narrow -o=--depth=1
+          west zephyr-export
+          python -m pip install -r zephyr/scripts/requirements.txt
+          west sdk install --gnu-toolchains arm-zephyr-eabi --no-hosttools
+      - name: Build Pro Micro UF2 diagnostics
+        run: |
+          cd "$RUNNER_TEMP/zephyr-workspace"
+          west build -b promicro_nrf52840/nrf52840/uf2 "$GITHUB_WORKSPACE/firmware/nrf52840/probe" -d "$RUNNER_TEMP/probe-build"
+      - name: Package firmware and provenance
+        env:
+          OUTPUT: ${{ runner.temp }}/nrf52840-artifact
+        run: |
+          mkdir -p "$OUTPUT"
+          cp "$RUNNER_TEMP/probe-build/zephyr/zephyr.uf2" "$OUTPUT/ActionRelay-S4-Probe.uf2"
+          cp "$RUNNER_TEMP/probe-build/zephyr/zephyr.hex" "$OUTPUT/ActionRelay-S4-Probe.hex"
+          cp "$RUNNER_TEMP/probe-build/zephyr/zephyr.elf" "$OUTPUT/ActionRelay-S4-Probe.elf"
+          cp "$RUNNER_TEMP/probe-build/zephyr/.config" "$OUTPUT/zephyr.config"
+          cp "$GITHUB_WORKSPACE/firmware/nrf52840/probe/README.md" "$OUTPUT/README.md"
+          cd "$OUTPUT"
+          sha256sum ActionRelay-S4-Probe.* > SHA256SUMS.txt
+          python - <<'PY'
+          import json, os, pathlib, subprocess
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          z=root/'zephyr-workspace/zephyr'
+          meta={'phase':'1-diagnostics','commit':os.environ['GITHUB_SHA'],
+                'board':'promicro_nrf52840/nrf52840/uf2','zephyr':'4.5.0',
+                'zephyrCommit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=z,text=True).strip(),
+                'sdk':(z/'SDK_VERSION').read_text().strip(),'west':'1.5.0',
+                'hardwareTested':False,'authenticationImplemented':False,
+                'cameraControlImplemented':False,'bootloaderCompatibilityConfirmed':False}
+          pathlib.Path('build-info.json').write_text(json.dumps(meta,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: nrf52840-s4-probe-${{ github.sha }}
+          path: ${{ runner.temp }}/nrf52840-artifact/
+          if-no-files-found: error
+          retention-days: 30
