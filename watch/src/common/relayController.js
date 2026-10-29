@@ -1,4 +1,4 @@
-/* The phone owns camera truth. Transport success is never recording success. */
+/* The relay owns camera truth. Transport success is never recording success. */
 export function createRelayController(options) {
   var connect = null;
   var visible = false;
@@ -11,7 +11,11 @@ export function createRelayController(options) {
   var timerSet = false;
   var sequence = 0;
   var epoch = 0;
-  var message = '先在手机打开中转应用';
+  var message = '请开启中转设备';
+  var relayKind = 'phone';
+  var relaySeen = null;
+  var probe = null;
+  var relayLatency = -1;
   var now = options.now || function () { return Date.now(); };
   var prefix = now().toString(36) + '-' + Math.floor(Math.random() * 1000000).toString(36);
   var lastSeq = -1;
@@ -29,6 +33,35 @@ export function createRelayController(options) {
       typeof status.ticket === 'string' && status.ticket.length > 0 && status.ticket.length <= 128;
   }
 
+  function validSession(value) {
+    return typeof value === 'string' && value.length > 0 && value.length <= 128;
+  }
+
+  function packetKind(packet) {
+    if (packet.relay === undefined) return lastSession === packet.session ? relayKind : 'phone';
+    if (!packet.relay || (packet.relay.kind !== 'phone' && packet.relay.kind !== 'nrf52840')) return null;
+    return packet.relay.kind;
+  }
+
+  function adoptPeer(packet, kind) {
+    if (lastSession && lastSession === packet.session && relayKind !== kind) return false;
+    if (lastSession && lastSession !== packet.session) {
+      retiredSessions.push(lastSession);
+      if (retiredSessions.length > 8) retiredSessions.shift();
+      lastStatus = null;
+      lastReceived = null;
+      lastSeq = -1;
+      pending = null;
+      probe = null;
+      relayLatency = -1;
+    }
+    lastSession = packet.session || null;
+    relayKind = kind;
+    relaySeen = now();
+    transportOpen = true;
+    return true;
+  }
+
   function emit() {
     if (destroyed || !visible) return;
     var age = lastReceived === null ? Infinity : now() - lastReceived;
@@ -40,7 +73,10 @@ export function createRelayController(options) {
     var canStart = fresh && hasTokens(status) && camera === 'ready' && status.canStart === true && !pending;
     var canStop = fresh && hasTokens(status) && camera === 'ready' && status.canStop === true &&
       (!pending || pending.action === 'start');
-    var phoneText = transportOpen ? (fresh ? '手机：已连接' : '手机：等待状态') : '手机：未连接';
+    var peerAge = relaySeen === null ? Infinity : now() - relaySeen;
+    var relayConnected = transportOpen && peerAge >= 0 && peerAge < 6000;
+    var peerName = relayKind === 'nrf52840' ? '开发板' : '手机';
+    var phoneText = peerName + (relayConnected ? '：已连接' : transportOpen ? '：等待状态' : '：未连接');
     var recordText = '状态未知';
     if (fresh && camera === 'ready' && typeof recording === 'boolean') recordText = recording ? '正在录像' : '已停止录像';
     else if (fresh && camera === 'authorizing') recordText = '请在相机确认';
@@ -60,6 +96,9 @@ export function createRelayController(options) {
     }
     options.onState({
       phoneText: phoneText,
+      relayKind: relayKind,
+      relayConnected: relayConnected,
+      relayLatencyMs: relayConnected ? relayLatency : -1,
       cameraText: '相机：' + (cameraNames[camera] || '状态未知'),
       recordText: recordText,
       metaText: meta,
@@ -83,8 +122,8 @@ export function createRelayController(options) {
       videoResolution: status ? status.videoResolution : -1,
       fpsIndex: status ? status.fpsIndex : -1,
       recordPhase: phase,
-      gpsState: status ? status.gpsState : 'off',
-      gpsEnabled: status ? status.gpsEnabled === true : false,
+      gpsState: status && relayKind !== 'nrf52840' ? status.gpsState : 'off',
+      gpsEnabled: status && relayKind !== 'nrf52840' ? status.gpsEnabled === true : false,
       photoEnabled: fresh && hasTokens(status) && camera === 'ready' && status.canPhoto === true && !pending,
       cameraState: status ? status.cameraState : -1,
       startEnabled: canStart,
@@ -98,6 +137,9 @@ export function createRelayController(options) {
     pending = null;
     lastSeq = -1;
     lastSession = null;
+    relaySeen = null;
+    probe = null;
+    relayLatency = -1;
     if (disconnected) transportOpen = false;
     message = text;
     emit();
@@ -120,27 +162,41 @@ export function createRelayController(options) {
     if (destroyed || !visible) return;
     var packet = parseIncoming(event);
     if (!packet) return;
+    if (packet.type === 'relayHello') {
+      var helloKind = packetKind(packet);
+      if (!helloKind || !validSession(packet.session) || retiredSessions.indexOf(packet.session) >= 0) return;
+      if (!adoptPeer(packet, helloKind)) return;
+      if (!lastStatus) message = '中转已连接，等待相机状态';
+      ping();
+      requestStatus();
+      emit();
+      return;
+    }
+    if (packet.type === 'pong') {
+      if (!probe || packet.id !== probe.id || packet.session !== probe.session || packet.session !== lastSession) return;
+      var elapsed = now() - probe.sentAt;
+      probe = null;
+      if (elapsed < 0 || elapsed >= 2000) return;
+      relayLatency = elapsed;
+      relaySeen = now();
+      emit();
+      return;
+    }
     if (packet.type === 'status') {
       if (retiredSessions.indexOf(packet.session) >= 0) return;
+      var kind = packetKind(packet);
+      if (!kind) return;
+      if (kind === 'nrf52840' && (!hasTokens(packet) || !NumberIsInteger(packet.seq) || !NumberIsInteger(packet.revision))) return;
       if (!Object.prototype.hasOwnProperty.call(cameraNames, packet.camera)) return;
       if (packet.recording !== null && typeof packet.recording !== 'boolean') return;
       if (typeof packet.canControl !== 'boolean' || typeof packet.busy !== 'boolean') return;
       if (typeof packet.seq === 'number' && lastSession === packet.session && packet.seq <= lastSeq) return;
+      if (!adoptPeer(packet, kind)) return;
       if (typeof packet.seq === 'number') lastSeq = packet.seq;
-      if (lastSession && lastSession !== packet.session) {
-        if (hasTokens(packet)) {
-          retiredSessions.push(lastSession);
-          if (retiredSessions.length > 8) retiredSessions.shift();
-        }
-        pending = null;
-        lastSeq = typeof packet.seq === 'number' ? packet.seq : -1;
-        message = '手机连接已更新，请重新操作';
-      }
-      lastSession = packet.session || null;
       var previousSession = pending ? pending.session : (lastStatus ? lastStatus.session : null);
       if (hasTokens(packet) && previousSession && previousSession !== packet.session) {
         pending = null;
-        message = '手机连接已更新，请重新操作';
+        message = '中转连接已更新，请重新操作';
       }
       transportOpen = true;
       lastStatus = packet;
@@ -165,6 +221,8 @@ export function createRelayController(options) {
         // Older phone builds and malformed/stale bundled states keep the safe query fallback.
         if (packet.state && packet.state.type === 'status' && packet.state.v === 1 &&
             packet.state.session === expectedSession && hasTokens(packet.state) &&
+            packetKind(packet.state) === relayKind &&
+            (relayKind !== 'nrf52840' || (NumberIsInteger(packet.state.seq) && NumberIsInteger(packet.state.revision))) &&
             typeof packet.state.seq === 'number' && packet.state.seq > lastSeq &&
             packet.state.revision === packet.revision &&
             Object.prototype.hasOwnProperty.call(cameraNames, packet.state.camera) &&
@@ -181,6 +239,21 @@ export function createRelayController(options) {
       } else return;
       emit();
     }
+  }
+
+  function NumberIsInteger(value) {
+    return typeof value === 'number' && isFinite(value) && value >= 0 && value <= 9007199254740991 && Math.floor(value) === value;
+  }
+
+  function ping() {
+    if (!visible || destroyed || relayKind !== 'nrf52840' || !validSession(lastSession)) return;
+    if (probe && now() - probe.sentAt >= 0 && now() - probe.sentAt < 2000) return;
+    sequence += 1;
+    var id = prefix + '-p' + sequence.toString(36);
+    probe = { id: id, session: lastSession, sentAt: now() };
+    send({ v: 1, type: 'ping', id: id, session: lastSession }, function () {
+      if (probe && probe.id === id) { probe = null; relayLatency = -1; emit(); }
+    });
   }
 
   function send(data, onFail) {
@@ -209,7 +282,7 @@ export function createRelayController(options) {
   function hello() {
     if (!visible || destroyed) return;
     send({ v: 1, type: 'hello' }, function (error, code) {
-      invalidate('手机通信失败' + (code === undefined ? '' : '（' + shorten(code) + '）'), true);
+      invalidate('中转通信失败' + (code === undefined ? '' : '（' + shorten(code) + '）'), true);
     });
   }
 
@@ -224,15 +297,19 @@ export function createRelayController(options) {
         transportOpen = true;
         lastReceived = null;
         lastStatus = null;
-        message = '手机已连接，正在取状态';
+        pending = null;
+        probe = null;
+        relaySeen = null;
+        relayLatency = -1;
+        message = '中转已连接，正在取状态';
         emit();
         hello();
       };
       connect.onclose = function () {
-        if (!destroyed) invalidate('手机已断开，请检查手机应用', true);
+        if (!destroyed) invalidate('中转已断开，请检查设备', true);
       };
       connect.onerror = function (error) {
-        if (!destroyed) invalidate('手机通信异常，请检查手机应用', true);
+        if (!destroyed) invalidate('中转通信异常，请检查设备', true);
       };
       return true;
     } catch (error) {
@@ -265,8 +342,9 @@ export function createRelayController(options) {
       } else if (lastReceived !== null && (time - lastReceived >= 6000 || time < lastReceived)) {
         lastReceived = null;
         lastStatus = null;
-        message = '状态已过期，请检查手机连接';
+        message = '状态已过期，请检查中转连接';
       }
+      if (probe && (time - probe.sentAt >= 2000 || time < probe.sentAt)) { probe = null; relayLatency = -1; }
       emit();
       schedule();
     }, 1000);
@@ -280,7 +358,10 @@ export function createRelayController(options) {
     lastStatus = null;
     lastReceived = null;
     pending = null;
-    message = '正在连接手机';
+    relaySeen = null;
+    probe = null;
+    relayLatency = -1;
+    message = '正在连接中转';
     emit();
     if (bind()) {
       try {
@@ -289,7 +370,7 @@ export function createRelayController(options) {
             if (destroyed || !visible || thisEpoch !== epoch) return;
             if (lastReceived !== null) return;
             transportOpen = !!result && result.status === 1;
-            message = transportOpen ? '手机已连接，正在取状态' : '先在手机打开中转应用';
+            message = transportOpen ? '中转已连接，正在取状态' : '请开启中转设备';
             emit();
             if (transportOpen) hello();
           },
@@ -311,6 +392,9 @@ export function createRelayController(options) {
     lastStatus = null;
     lastReceived = null;
     pending = null;
+    relaySeen = null;
+    probe = null;
+    relayLatency = -1;
   }
 
   function refresh() {
@@ -335,7 +419,7 @@ export function createRelayController(options) {
     var canStop = lastStatus && lastStatus.canStop === true && (!pending || pending.action === 'start');
     if (!transportOpen || !lastStatus || !hasTokens(lastStatus) || age < 0 || age >= 6000 || lastStatus.camera !== 'ready' ||
         (photo ? (!canPhoto || pending) : (desired ? (!canStart || pending) : !canStop))) {
-      message = pending ? '等待上一条指令的相机确认' : '尚未就绪，请先连接手机和相机';
+      message = pending ? '等待上一条指令的相机确认' : '尚未就绪，请先连接中转和相机';
       emit();
       return false;
     }
@@ -371,5 +455,5 @@ export function createRelayController(options) {
     pending = null;
   }
 
-  return { show: show, hide: hide, refresh: refresh, command: command, destroy: destroy };
+  return { show: show, hide: hide, refresh: refresh, ping: ping, command: command, destroy: destroy };
 }

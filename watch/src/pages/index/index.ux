@@ -18,7 +18,7 @@
     </div>
     <div class="tools" if="{{toolsOpen}}">
       <text class="tools-title">连接</text>
-      <div class="tools-row"><image class="row-icon" src="{{phoneIcon}}"></image><text class="row-text">{{phoneText}}</text></div>
+      <div class="tools-row" onclick="checkRelay"><image class="row-icon" src="{{phoneIcon}}"></image><text class="row-text">{{phoneText}}</text></div>
       <div class="tools-row"><image class="row-icon" src="{{cameraIcon}}"></image><text class="row-text">{{cameraText}}</text></div>
       <div class="tools-row feedback-row" onclick="toggleFeedback"><text class="feedback-mark">振</text><text class="row-text">{{feedbackText}}</text></div>
       <text class="tools-note">{{noteText}}</text>
@@ -36,9 +36,9 @@ import { remainingLabel, videoLabel, temperatureLabel, temperatureIcon } from '.
 export default {
   private: {
     toolsOpen: false,
-    phoneText: '手机：未连接',
+    phoneText: '中转：未连接',
     cameraText: '相机：未连接',
-    noteText: '请在手机开启中转',
+    noteText: '请开启中转设备',
     phoneIcon: '/common/ui/phone-off.png',
     cameraIcon: '/common/ui/camera-off.png',
     gpsIcon: '/common/ui/gps-off.png',
@@ -86,7 +86,8 @@ export default {
     this._relay.show()
   },
   applyState(state) {
-    this.phoneText = state.phoneText || '手机：未连接'
+    this.phoneText = state.phoneText || '中转：未连接'
+    if (state.relayKind === 'nrf52840' && state.relayLatencyMs >= 0) this.phoneText += ' ' + Math.floor(state.relayLatencyMs) + 'ms'
     this.cameraText = state.cameraText || '相机：未连接'
     this.noteText = state.noteText || '状态以相机回报为准'
     this.photoEnabled = state.photoEnabled === true
@@ -104,7 +105,7 @@ export default {
     this.refreshMode = (!phone || !camera) && !pending
     this.captureClass = this.refreshMode ? 'capture capture-reconnect' : 'capture'
     this.captureImageClass = this.refreshMode ? 'capture-image capture-refresh' : 'capture-image'
-    this.phoneIcon = '/common/ui/phone-' + (phone ? 'on' : 'off') + '.png'
+    this.phoneIcon = '/common/ui/' + (state.relayKind === 'nrf52840' ? 'board-' : 'phone-') + ((state.relayConnected === undefined ? phone : state.relayConnected) ? 'on' : 'off') + '.png'
     this.cameraIcon = '/common/ui/camera-' + (camera ? 'on' : 'off') + '.png'
     this.batteryIcon = '/common/ui/battery-' + (typeof state.battery === 'number' && state.battery >= 0 ? (state.battery <= 20 ? 'low' : state.battery <= 50 ? 'medium' : 'high') : 'off') + '.png'
     var gps = state.gpsState || 'off'
@@ -160,7 +161,8 @@ export default {
     }
   },
   endCapturePress() { if (this._hold) this._hold.release() },
-  openTools() { if (this._hold) this._hold.cancel(); this.toolsOpen = true },
+  checkRelay() { if (this._relay) this._relay.ping() },
+  openTools() { if (this._hold) this._hold.cancel(); this.toolsOpen = true; this.checkRelay() },
   closeTools() { this.toolsOpen = false },
   refreshStatus() { if (this._relay) this._relay.refresh() }
 }

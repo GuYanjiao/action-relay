@@ -198,3 +198,58 @@ for(const invalid of [{session:'session-b'},{seq:1},{revision:8},{camera:'invali
   t.controller.destroy();checked++;
 }
 console.log(`PASS: ${checked} controller integration scenarios; no camera command retries.`);
+
+// A companion greeting proves only the app channel; camera truth stays unknown.
+{
+  const t=setup();t.controller.show();t.status();t.controller.command('start');
+  const old=t.sent.find(x=>x.type==='command');
+  t.receive({v:1,type:'relayHello',session:'board-a',relay:{kind:'nrf52840'}});
+  assert.equal(t.view().relayKind,'nrf52840');assert.equal(t.view().relayConnected,true);
+  assert.equal(t.view().fresh,false);assert.equal(t.view().pending,false);
+  assert.equal(t.controller.command('start'),false);
+  const ping=t.sent.find(x=>x.type==='ping');assert.equal(ping.session,'board-a');
+  t.advance(80);t.receive({v:1,type:'pong',id:ping.id,session:'wrong'});
+  assert.equal(t.view().relayLatencyMs,-1);
+  t.receive({v:1,type:'pong',id:ping.id,session:'board-a'});
+  assert.equal(t.view().relayLatencyMs,80);assert.equal(t.view().startEnabled,false);
+  t.receive({v:1,type:'result',id:old.id,session:'session-a',phase:'confirmed',ok:true});
+  t.status({seq:100});assert.equal(t.view().fresh,false,'retired phone status cannot replace board greeting');
+  t.status({session:'board-a',ticket:'board-ticket',relay:{kind:'nrf52840'},gpsEnabled:true,gpsState:'ready'});
+  assert.equal(t.view().startEnabled,true);assert.equal(t.view().gpsEnabled,false);
+  assert.equal(t.view().gpsState,'off','the current board has no GNSS source');
+  t.controller.command('start');const command=t.sent.filter(x=>x.type==='command').at(-1);
+  assert.equal(command.session,'board-a');assert.equal(command.ticket,'board-ticket');
+  t.controller.destroy();checked++;
+}
+{
+  const t=setup();t.controller.show();
+  for(const session of ['',null,'x'.repeat(129)]){
+    t.receive({v:1,type:'relayHello',session,relay:{kind:'nrf52840'}});
+    assert.equal(t.view().relayConnected,false);
+  }
+  t.receive({v:1,type:'relayHello',session:'board-a',relay:{kind:'unknown'}});
+  assert.equal(t.view().relayConnected,false);
+  t.receive({v:1,type:'relayHello',session:'board-a',relay:{kind:'nrf52840'}});
+  for(const bad of [{seq:NaN},{seq:-1},{seq:1.5},{revision:null},{ticket:''}]){
+    t.status(Object.assign({session:'board-a',relay:{kind:'nrf52840'}},bad));
+    assert.equal(t.view().fresh,false);
+  }
+  t.status({session:'board-a',relay:{kind:'phone'}});
+  assert.equal(t.view().fresh,false,'same session cannot change relay identity');
+  t.status({session:'board-a'});assert.equal(t.view().fresh,true,'same-session status may omit identity');
+  t.controller.destroy();checked++;
+}
+{
+  const t=setup();t.controller.show();
+  t.receive({v:1,type:'relayHello',session:'board-a',relay:{kind:'nrf52840'}});
+  const first=t.sent.find(x=>x.type==='ping');
+  t.controller.ping();assert.equal(t.sent.filter(x=>x.type==='ping').length,1,'one outstanding probe');
+  t.advance(2000);t.receive({v:1,type:'pong',id:first.id,session:'board-a'});
+  assert.equal(t.view().relayLatencyMs,-1,'late pong is discarded');
+  t.controller.ping();const second=t.sent.filter(x=>x.type==='ping').at(-1);
+  t.controller.hide();t.receive({v:1,type:'pong',id:second.id,session:'board-a'});
+  t.controller.show();assert.equal(t.view().relayLatencyMs,-1);
+  assert.equal(t.view().startEnabled,false);assert.equal(t.view().relayConnected,false);
+  t.controller.destroy();checked++;
+}
+console.log(`PASS: ${checked} total scenarios including companion identity, ping and lifecycle isolation.`);
