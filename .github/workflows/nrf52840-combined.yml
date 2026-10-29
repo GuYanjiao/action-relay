@@ -20,7 +20,7 @@ concurrency:
 jobs:
   coordination-tests:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -35,6 +35,13 @@ jobs:
         run: |
           gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer firmware/nrf52840/protocol/miwear_l1.c firmware/nrf52840/protocol/tests/l1_test.c -o "$RUNNER_TEMP/miwear-l1-test"
           "$RUNNER_TEMP/miwear-l1-test"
+      - name: Check PSA HMAC and CCM against independent implementations
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libmbedtls-dev
+          python firmware/nrf52840/protocol/tests/vectors.py
+          gcc -std=c11 -Wall -Wextra -Werror firmware/nrf52840/protocol/miwear_auth.c firmware/nrf52840/protocol/miwear_psa.c firmware/nrf52840/protocol/tests/psa_test.c -lmbedcrypto -lcrypto -o "$RUNNER_TEMP/miwear-psa-test"
+          "$RUNNER_TEMP/miwear-psa-test"
   combined:
     needs: coordination-tests
     runs-on: ubuntu-24.04

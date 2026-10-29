@@ -25,6 +25,7 @@
 #include "activity.h"
 #include "radio_scan.h"
 #include "watch_diag.h"
+#include "../../protocol/miwear_psa.h"
 
 LOG_MODULE_REGISTER(relay, LOG_LEVEL_INF);
 #define STALE_MS 5000
@@ -453,6 +454,8 @@ int main(void)
     hrm.HRM_PROFILE_model_num = 1;
     err = bt_enable(NULL);
     if (err) startup_error("BLE", err);
+    int crypto_error = miwear_psa_init();
+    LOG_INF("Companion crypto init: %d; authentication not yet implemented", crypto_error);
     radio_scan_init();
     radio_scan_register(RADIO_HEART, scan_result);
     watch_diag_init();
