@@ -64,6 +64,8 @@ jobs:
           /usr/bin/python3 "$NB/generator/nanopb_generator.py" -I . -D "$GEN" miwear_app.proto
           gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -I"$NB" -I"$GEN" src/miwear_app.c tests/miwear_app_test.c "$GEN/miwear_app.pb.c" "$NB/pb_common.c" "$NB/pb_encode.c" "$NB/pb_decode.c" -o "$RUNNER_TEMP/miwear-app-test"
           "$RUNNER_TEMP/miwear-app-test"
+          gcc -std=c11 -Wall -Wextra -Werror -I"$NB" -I"$GEN" src/miwear_pb.c src/miwear_l2.c tests/miwear_l2_test.c ../protocol/miwear_psa.c "$GEN/miwear_auth.pb.c" "$NB/pb_common.c" "$NB/pb_encode.c" "$NB/pb_decode.c" -lmbedcrypto -o "$RUNNER_TEMP/miwear-l2-test"
+          "$RUNNER_TEMP/miwear-l2-test"
   combined:
     needs: coordination-tests
     runs-on: ubuntu-24.04

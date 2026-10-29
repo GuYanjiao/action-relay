@@ -38,6 +38,19 @@ int main(void)
     const size_t sizes[] = {0, 1, 15, 16, 17, 127, sizeof plain};
     for (size_t i = 0; i < sizeof sizes / sizeof sizes[0]; ++i) {
         size_t size = sizes[i], written = 99;
+        EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new(); assert(ctx);
+        assert(EVP_EncryptInit_ex(ctx, EVP_aes_128_ctr(), NULL, key, key) == 1);
+        int count = 0, last = 0;
+        assert(EVP_EncryptUpdate(ctx, expected, &count, plain, (int)size) == 1);
+        assert(EVP_EncryptFinal_ex(ctx, expected + count, &last) == 1);
+        assert((size_t)(count + last) == size); EVP_CIPHER_CTX_free(ctx);
+        assert(miwear_psa_ctr(key, key, plain, size, cipher, sizeof cipher, &written) == 0);
+        assert(written == size && !memcmp(cipher, expected, size));
+        assert(miwear_psa_ctr(key, key, cipher, size, decoded, sizeof decoded, &written) == 0);
+        assert(written == size && !memcmp(decoded, plain, size));
+    }
+    for (size_t i = 0; i < sizeof sizes / sizeof sizes[0]; ++i) {
+        size_t size = sizes[i], written = 99;
         openssl_ccm(key, nonce, plain, size, expected);
         assert(miwear_psa_ccm(true, key, nonce, plain, size, cipher, sizeof cipher, &written) == 0);
         assert(written == size + 4 && !memcmp(cipher, expected, written));
@@ -52,6 +65,7 @@ int main(void)
         }
     }
     size_t written = 99;
+    assert(miwear_psa_ctr(key, key, plain, sizeof plain, cipher, 1, &written) != 0 && written == 0);
     assert(miwear_psa_ccm(false, key, nonce, cipher, 3, decoded, sizeof decoded, &written) != 0 && written == 0);
     assert(miwear_psa_ccm(true, key, nonce, plain, sizeof plain, cipher, 1, &written) != 0 && written == 0);
     assert(miwear_psa_hmac(NULL, NULL, 16, plain, 1, proof) != 0);

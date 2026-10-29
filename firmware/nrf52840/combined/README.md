@@ -47,3 +47,5 @@ watch disconnect
 `src/miwear_session.[ch]` 是离线测试中的认证状态机：新鲜随机数 → 校验手表 HMAC → 加密 companion 描述并构造确认 → 等待明确确认。传输忙时只保留一条待发消息，超时、失败或关闭时清除临时密钥；没有在线调用入口、真实密钥导入或持久化。调用者必须先完成 SAR，并提供 CSPRNG 随机数；PSA 初始化和所有会话操作须在合适栈大小的串行工作上下文中执行，不能在 GATT 接收回调里直接做密码计算。
 
 配套描述中的 CCM 与后续应用 L2 加密应分别核对：固定 Core 源码的认证描述使用 CCM，而应用 `V2L2Cipher` 使用 CTR，不能把当前 CCM helper 直接套到应用消息上。仍待真实会话验证，不提供加密失败后的明文降级。
+
+现已增加应用 PB 编解码及 L2 包装模块：PB 信道 1、认证 write=1、应用 encrypted-write=2。应用收发仅在认证状态 READY 时允许，使用方向对应的会话密钥与参考实现一致的 CTR IV；不是 CCM，也没有明文降级。CTR 不提供完整性保护，后续仍需验证 PB、应用包名/指纹、会话和命令票据。参照固定版本的 [L2 格式](https://github.com/AstralSightStudios/AstroBox-NG-Module-Core/blob/dc08a079501b3ca7dd9215727ccbc348278914fc/src/device/xiaomi/packet/v2/layer2.rs)与 [方向密钥/IV](https://github.com/AstralSightStudios/AstroBox-NG-Module-Core/blob/dc08a079501b3ca7dd9215727ccbc348278914fc/src/device/xiaomi/packet/cipher.rs)，未接入实机 GATT 收发。
