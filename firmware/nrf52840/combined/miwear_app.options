@@ -1,0 +1,3 @@
+actionrelayapp.Identity.package_name max_size:95
+actionrelayapp.Identity.fingerprint max_size:64
+actionrelayapp.Content.content max_size:768

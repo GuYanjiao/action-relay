@@ -1,0 +1,31 @@
+// Minimal application-message fields, independently expressed from wire schema:
+// AstroBox Pb 03a92010056dd41af114f6f46fd612104b27bd7b.
+// No install, launch, permission or account mutation commands.
+syntax = "proto2";
+package actionrelayapp;
+message Envelope {
+    required uint32 type = 1;
+    required uint32 id = 2;
+    optional App app = 22;
+}
+message App {
+    oneof payload {
+        Identity identity = 5;
+        Status status = 8;
+        Content content = 9;
+    }
+}
+message Identity {
+    // Length-preserving bytes (same wire type as UTF-8 string), so embedded NUL
+    // cannot make a different package compare equal to a configured C string.
+    required bytes package_name = 1;
+    required bytes fingerprint = 2;
+}
+message Status {
+    required Identity identity = 1;
+    required uint32 status = 2;
+}
+message Content {
+    required Identity identity = 1;
+    required bytes content = 2;
+}
