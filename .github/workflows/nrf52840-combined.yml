@@ -35,6 +35,8 @@ jobs:
         run: |
           gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer firmware/nrf52840/protocol/miwear_l1.c firmware/nrf52840/protocol/tests/l1_test.c -o "$RUNNER_TEMP/miwear-l1-test"
           "$RUNNER_TEMP/miwear-l1-test"
+          gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer firmware/nrf52840/protocol/miwear_l1.c firmware/nrf52840/protocol/miwear_sar.c firmware/nrf52840/protocol/tests/sar_test.c -o "$RUNNER_TEMP/miwear-sar-test"
+          "$RUNNER_TEMP/miwear-sar-test"
       - name: Check PSA HMAC and CCM against independent implementations
         run: |
           sudo apt-get update -qq
