@@ -125,7 +125,10 @@ static int cmd_connect(const struct shell *sh,size_t argc,char **argv)
 {
     if(peer)return -EALREADY;
     bt_addr_le_t address;
-    int error=bt_addr_le_from_str(argv[1],argv[2],&address);
+    int error=bt_addr_from_str(argv[1],&address.a);
+    if (!strcmp(argv[2],"public"))address.type=BT_ADDR_LE_PUBLIC;
+    else if (!strcmp(argv[2],"random"))address.type=BT_ADDR_LE_RANDOM;
+    else error=-EINVAL;
     if(error){shell_error(sh,"use: probe connect AA:BB:CC:DD:EE:FF public|random");return error;}
     if(scanning){error=bt_le_scan_stop();if(error)return error;scanning=false;}
     error=bt_conn_le_create(&address,BT_CONN_LE_CREATE_CONN,BT_LE_CONN_PARAM_DEFAULT,&peer);
