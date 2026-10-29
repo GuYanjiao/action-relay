@@ -10,7 +10,11 @@
 
 ## 正在进行
 
-新增独立 GitHub Actions，按 Zephyr 4.5.0 的 promicro_nrf52840/nrf52840/uf2 板定义构建并上传产物；实物 Bootloader 尚未确认，不能直接承诺 UF2 可刷。
+新增独立 GitHub Actions，按 Zephyr 4.5.0 的 promicro_nrf52840/nrf52840/uf2 板定义构建并上传产物。首次运行 40811018203 在 zephyr-export 导入 jsonschema 时失败，已将 requirements 安装移到 export 前；尚未通过 ARM 编译。
+
+实物启动盘 F: NICENANO，Board-ID nRF52840-nicenano，UF2 Bootloader 0.6.0，S140 6.1.1。仅检查，未刷写或擦除。下一步核对 UF2 写入地址在应用分区 0x26000..0xec000 内。
+
+阶段 2A 的可移植认证派生、双方证明计算及合成向量测试已签名保存 bf8aaa4；不含真实 AuthKey，不代表认证成功。测试等待下一次云端运行。
 
 ## 后续顺序
 

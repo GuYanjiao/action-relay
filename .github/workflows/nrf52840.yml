@@ -43,8 +43,8 @@ jobs:
           west init --manifest-url https://github.com/zephyrproject-rtos/zephyr --manifest-rev v4.5.0 "$RUNNER_TEMP/zephyr-workspace"
           cd "$RUNNER_TEMP/zephyr-workspace"
           west update --narrow -o=--depth=1
-          west zephyr-export
           python -m pip install -r zephyr/scripts/requirements.txt
+          west zephyr-export
           west sdk install --gnu-toolchains arm-zephyr-eabi --no-hosttools
       - name: Build Pro Micro UF2 diagnostics
         run: |

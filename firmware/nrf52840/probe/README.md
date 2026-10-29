@@ -10,6 +10,8 @@ USB 串口命令行；仅打印名称含 Watch S4、声明心率或 FE95 服务�
 
 ## 使用前
 
+2026-10-29 已读取用户实物启动盘：卷名 `NICENANO`，Board-ID `nRF52840-nicenano`，UF2 Bootloader `0.6.0`，SoftDevice `S140 6.1.1`。该信息与所选板定义的 SD v6 分区方向一致；仍需检查编译产物写入范围，并在刷写后验证 USB/BLE。尚未刷写，不代表克隆板引脚定义经过验证。
+
 先确认启动盘的 `INFO_UF2.TXT` 中 Board-ID、Bootloader 和 SoftDevice 信息，确认与 Zephyr 上游 UF2 布局兼容后再刷写。本阶段不提供自动刷写脚本，也不要用全片擦除或替换 Bootloader 来试错。UF2 文件成功编译不证明它适配所有红色克隆板。
 
 没有板卡 USB 信息时，先取云端产物和记录，不直接刷写。USB 正常运行时通过串口终端打开相应端口（115200，8N1），按回车看到 `s4>`。
