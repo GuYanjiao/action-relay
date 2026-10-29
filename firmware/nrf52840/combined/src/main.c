@@ -23,6 +23,7 @@
 #include <ant_profiles/hrm/ant_hrm.h>
 #include "hr_measurement.h"
 #include "activity.h"
+#include "radio_scan.h"
 
 LOG_MODULE_REGISTER(relay, LOG_LEVEL_INF);
 #define STALE_MS 5000
@@ -204,6 +205,11 @@ static uint8_t discovered(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 }
 static void scan_work_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(scan_work, scan_work_handler);
+static void connection_create_failed(int err)
+{
+    LOG_WRN("Heart rate connection creation failed: %d", err);
+    if (atomic_get(&ble_allowed)) k_work_reschedule(&scan_work, K_SECONDS(1));
+}
 static bool advertised(struct bt_data *data, void *context)
 {
     bool *found = context;
@@ -222,10 +228,9 @@ static void scan_result(const bt_addr_le_t *address, int8_t rssi, uint8_t type,
     if (!atomic_get(&ble_allowed) || peer || (type != BT_GAP_ADV_TYPE_ADV_IND && type != BT_GAP_ADV_TYPE_SCAN_RSP)) return;
     bool found = false;
     bt_data_parse(ad, advertised, &found);
-    if (!found || !atomic_get(&ble_allowed) || bt_le_scan_stop()) return;
-    if (!atomic_get(&ble_allowed)) return;
-    int err = bt_conn_le_create(address, BT_CONN_LE_CREATE_CONN,
-                                BT_LE_CONN_PARAM_DEFAULT, &peer);
+    if (!found || !atomic_get(&ble_allowed)) return;
+    radio_scan_request(RADIO_HEART, false);
+    int err = radio_scan_connect(RADIO_HEART, address, &peer, connection_create_failed);
     if (err) {
         LOG_WRN("Connection creation failed: %d", err);
         k_work_reschedule(&scan_work, K_SECONDS(1));
@@ -235,19 +240,14 @@ static void scan_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
     if (!atomic_get(&ble_allowed) || peer) return;
-    const struct bt_le_scan_param params = {
-        .type = BT_LE_SCAN_TYPE_ACTIVE,
-        .interval = BT_GAP_SCAN_FAST_INTERVAL,
-        .window = BT_GAP_SCAN_FAST_WINDOW / 2,
-    };
-    int err = bt_le_scan_start(&params, scan_result);
-    if (err && err != -EALREADY) k_work_reschedule(&scan_work, K_SECONDS(1));
-    else LOG_INF("Scanning for BLE Heart Rate Service 180D");
+    radio_scan_request(RADIO_HEART, true);
+    LOG_INF("Requested shared scan for BLE Heart Rate Service 180D");
 }
 static void connected(struct bt_conn *conn, uint8_t err)
 {
     /* Other BLE links must not enter the heart-rate discovery state machine. */
     if (conn != peer) return;
+    radio_scan_connected(RADIO_HEART);
     if (err) {
         if (peer) bt_conn_unref(peer);
         peer = NULL;
@@ -297,7 +297,7 @@ static void ble_stop(void)
     struct k_work_sync sync;
     k_work_cancel_delayable_sync(&scan_work, &sync);
     k_work_cancel_delayable(&receive_watchdog);
-    (void)bt_le_scan_stop();
+    radio_scan_request(RADIO_HEART, false);
     bt_conn_foreach(BT_CONN_TYPE_LE, timeout_disconnect, NULL);
     invalidate();
 }
@@ -437,6 +437,8 @@ int main(void)
     hrm.HRM_PROFILE_model_num = 1;
     err = bt_enable(NULL);
     if (err) startup_error("BLE", err);
+    radio_scan_init();
+    radio_scan_register(RADIO_HEART, scan_result);
     err = cadence_setup();
     if (err) startup_error("Cadence RX", err);
     LOG_INF("Standby: waiting for crank motion; BLE search budget %u seconds", ACTIVITY_SEARCH_MS / 1000);
