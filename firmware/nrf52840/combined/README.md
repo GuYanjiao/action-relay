@@ -8,6 +8,21 @@
 
 **这仍是组合开发基线，相机控制尚未接入，不能作为双功能完成版刷写。** `../protocol/miwear_auth.c` 参与编译但尚未从运行流程调用，不含用户 AuthKey。已有独立 probe 只作为协议诊断工具，不替换板上 ANT+ 应用。
 
+## 组合内的只读诊断
+
+新增 USB 文本命令，每条以回车结束；原来的单字节 `B` 进入启动盘命令保留。输入每轮最多处理 32 字节，不在 ANT 主循环等待整行。诊断不主动配对、不写 GATT、不控制相机，不自动选择附近设备。
+
+```text
+watch scan
+watch stop
+watch connect AA:BB:CC:DD:EE:FF random
+watch services
+watch chars
+watch disconnect
+```
+
+只连接用户核实的实际手表地址，类型按广播中的 public/random 选择。扫描候选条件为 S4 名称或 FE95，条件本身不能证明设备身份。等连接成功再枚举服务，等完成后再枚举特征，核对完整 UUID 与权限。该命令集尚待组合固件的云端编译和实机检查，不能将心率转发成功推断为 FE95 可用。心率仍按原踏频策略触发，诊断需求独立登记。
+
 ## 构建与验证
 
 云端使用与实测心率工程一致的 NCS 3.2.4、ANT Add-on 2.1.1 及官方工具链镜像。该 SDK 配对符合 [ANT 官方兼容表](https://ant-nrfconnect.github.io/doc/compatibility.html)；没有因上游 Zephyr 更新而单独升级其中一个组件。本地不编译，不自动刷写。

@@ -24,6 +24,7 @@
 #include "hr_measurement.h"
 #include "activity.h"
 #include "radio_scan.h"
+#include "watch_diag.h"
 
 LOG_MODULE_REGISTER(relay, LOG_LEVEL_INF);
 #define STALE_MS 5000
@@ -57,10 +58,25 @@ static void usb_bootloader_check(void)
         rx_enabled = true;
     }
     unsigned char command;
-    if (uart_poll_in(console, &command) == 0 && command == 'B') {
-        /* Adafruit bootloader's documented UF2 reset request. */
-        NRF_POWER->GPREGRET = 0x57;
-        sys_reboot(SYS_REBOOT_COLD);
+    static char line[96];
+    static size_t length;
+    static bool discard;
+    /* B retains the old bootloader request; diagnostic lines require a newline.
+     * Bound input handling so a host cannot monopolize the ANT main loop. */
+    for (unsigned count = 0; count < 32 && uart_poll_in(console, &command) == 0; ++count) {
+        if (command == 'B' && !length && !discard) {
+            NRF_POWER->GPREGRET = 0x57;
+            sys_reboot(SYS_REBOOT_COLD);
+        } else if (command == '\r' || command == '\n') {
+            if (length && !discard) {
+                line[length] = 0;
+                if (!watch_diag_command(line)) LOG_WRN("Unknown USB command");
+            }
+            length = 0; discard = false;
+        } else if (!discard) {
+            if (length < sizeof(line) - 1) line[length++] = command;
+            else { discard = true; LOG_WRN("USB command too long; discarded"); }
+        }
     }
 #endif
 }
@@ -439,6 +455,7 @@ int main(void)
     if (err) startup_error("BLE", err);
     radio_scan_init();
     radio_scan_register(RADIO_HEART, scan_result);
+    watch_diag_init();
     err = cadence_setup();
     if (err) startup_error("Cadence RX", err);
     LOG_INF("Standby: waiting for crank motion; BLE search budget %u seconds", ACTIVITY_SEARCH_MS / 1000);
