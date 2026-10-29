@@ -16,6 +16,20 @@ static bool account(const uint8_t *data, size_t length, uint32_t id, actionrelay
     return pb_decode(&stream, actionrelay_AuthEnvelope_fields, message) &&
            message->type == 1 && message->id == id && message->has_account;
 }
+enum miwear_pb_auth_kind miwear_pb_auth_kind(const uint8_t *data, size_t length)
+{
+    if (!data) return MIWEAR_PB_MALFORMED;
+    actionrelay_AuthEnvelope message = actionrelay_AuthEnvelope_init_zero;
+    pb_istream_t stream = pb_istream_from_buffer(data, length);
+    if (!pb_decode(&stream, actionrelay_AuthEnvelope_fields, &message)) return MIWEAR_PB_MALFORMED;
+    if (message.type != 1 || !message.has_account) return MIWEAR_PB_OTHER;
+    if (message.account.which_payload == actionrelay_AuthAccount_error_code_tag) return MIWEAR_PB_ACCOUNT_ERROR;
+    if (message.id == 26 && message.account.which_payload == actionrelay_AuthAccount_device_verify_tag)
+        return MIWEAR_PB_DEVICE_VERIFY;
+    if (message.id == 27 && message.account.which_payload == actionrelay_AuthAccount_device_confirm_tag)
+        return MIWEAR_PB_DEVICE_CONFIRM;
+    return MIWEAR_PB_OTHER;
+}
 size_t miwear_pb_verify(uint8_t *out, size_t capacity, const uint8_t random[16])
 {
     if (!random) return 0;

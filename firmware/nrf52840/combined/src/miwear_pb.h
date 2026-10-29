@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 /* No transport, pairing, key storage or account mutation in these helpers. */
+enum miwear_pb_auth_kind { MIWEAR_PB_MALFORMED = -1, MIWEAR_PB_OTHER,
+    MIWEAR_PB_DEVICE_VERIFY, MIWEAR_PB_DEVICE_CONFIRM, MIWEAR_PB_ACCOUNT_ERROR };
+enum miwear_pb_auth_kind miwear_pb_auth_kind(const uint8_t *, size_t);
 size_t miwear_pb_verify(uint8_t *, size_t, const uint8_t random[16]);
 bool miwear_pb_device_verify(const uint8_t *, size_t, uint8_t random[16], uint8_t signature[32]);
 size_t miwear_pb_confirm(uint8_t *, size_t, const uint8_t signature[32], const uint8_t *, size_t);
