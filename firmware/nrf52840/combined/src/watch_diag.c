@@ -16,7 +16,8 @@ static struct bt_conn *watch_peer;
 static struct bt_gatt_discover_params discovery;
 static bool discovering;
 static bool initialized;
-struct advert { bool xiaomi; char name[40]; };
+static atomic_t scan_reports;
+struct advert { bool xiaomi, heart; char name[40]; };
 static bool field(struct bt_data *data, void *context)
 {
     struct advert *advert = context;
@@ -26,20 +27,29 @@ static bool field(struct bt_data *data, void *context)
         advert->name[n] = 0;
     }
     if (data->type == BT_DATA_UUID16_ALL || data->type == BT_DATA_UUID16_SOME)
-        for (size_t i = 0; i + 1 < data->data_len; i += 2)
-            if (sys_get_le16(data->data + i) == 0xfe95) advert->xiaomi = true;
+        for (size_t i = 0; i + 1 < data->data_len; i += 2) {
+            uint16_t uuid = sys_get_le16(data->data + i);
+            if (uuid == 0xfe95) advert->xiaomi = true;
+            if (uuid == 0x180d) advert->heart = true;
+        }
+    if (data->type == BT_DATA_SVC_DATA16 && data->data_len >= 2) {
+        uint16_t uuid = sys_get_le16(data->data);
+        if (uuid == 0xfe95) advert->xiaomi = true;
+        if (uuid == 0x180d) advert->heart = true;
+    }
     return true;
 }
 static void advertisement(const bt_addr_le_t *address, int8_t rssi, uint8_t type,
                            struct net_buf_simple *data)
 {
     ARG_UNUSED(type);
+    atomic_inc(&scan_reports);
     struct advert advert = {0};
     bt_data_parse(data, field, &advert);
-    if (!advert.xiaomi && !strstr(advert.name, "Watch S4")) return;
+    if (!advert.xiaomi && !advert.heart && !strstr(advert.name, "Watch S4")) return;
     char text[BT_ADDR_LE_STR_LEN];
     bt_addr_le_to_str(address, text, sizeof text);
-    LOG_INF("Candidate %s RSSI=%d name=%s FE95=%d", text, rssi, advert.name, advert.xiaomi);
+    LOG_INF("Candidate %s RSSI=%d name=%s FE95=%d HR=%d", text, rssi, advert.name, advert.xiaomi, advert.heart);
 }
 static void create_failed(int error) { LOG_WRN("Watch diagnostic connect failed: %d", error); }
 static void connected(struct bt_conn *conn, uint8_t error)
@@ -114,9 +124,11 @@ bool watch_diag_command(char *line)
     if (!initialized) { LOG_WRN("BLE diagnostics are not initialized"); return true; }
     int error = -EINVAL;
     if (count == 2 && !strcmp(args[1], "scan")) {
+        atomic_set(&scan_reports, 0);
         radio_scan_request(RADIO_WATCH, true); error = 0;
     } else if (count == 2 && !strcmp(args[1], "stop")) {
         radio_scan_request(RADIO_WATCH, false); error = 0;
+        LOG_INF("Watch diagnostic advertisements received: %ld", (long)atomic_get(&scan_reports));
     } else if (count == 4 && !strcmp(args[1], "connect")) {
         bt_addr_le_t address;
         error = bt_addr_from_str(args[2], &address.a);

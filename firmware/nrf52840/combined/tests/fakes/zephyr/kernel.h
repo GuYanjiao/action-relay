@@ -14,6 +14,7 @@ typedef int atomic_val_t;
 #define ATOMIC_INIT(x) (x)
 static inline int atomic_get(const atomic_t *p) { return *p; }
 static inline void atomic_set(atomic_t *p, int value) { *p = value; }
+static inline void atomic_inc(atomic_t *p) { ++*p; }
 static inline void atomic_set_bit(atomic_t *p, int bit) { *p |= (int)BIT(bit); }
 static inline void atomic_clear_bit(atomic_t *p, int bit) { *p &= ~(int)BIT(bit); }
 static inline bool atomic_cas(atomic_t *p, int old, int value)

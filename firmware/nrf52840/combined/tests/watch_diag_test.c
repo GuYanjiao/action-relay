@@ -30,6 +30,14 @@ static bool command(const char *text)
 { char line[128]; assert(strlen(text) < sizeof line); strcpy(line, text); return watch_diag_command(line); }
 int main(void)
 {
+    uint8_t service_bytes[] = {0x95, 0xfe, 0x00};
+    struct bt_data service = {.type = BT_DATA_SVC_DATA16, .data_len = 3, .data = service_bytes};
+    struct advert advert = {0};
+    field(&service, &advert); assert(advert.xiaomi);
+    advert.xiaomi = false; service.data_len = 1;
+    field(&service, &advert); assert(!advert.xiaomi && !advert.heart);
+    service.data_len = 3; service_bytes[0] = 0x0d; service_bytes[1] = 0x18;
+    field(&service, &advert); assert(!advert.xiaomi && advert.heart);
     assert(command("watch scan") && scan_requests == 0);
     watch_diag_init();
     assert(!command("other scan"));

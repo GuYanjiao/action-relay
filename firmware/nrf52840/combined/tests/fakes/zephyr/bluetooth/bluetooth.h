@@ -14,6 +14,7 @@ struct bt_data { uint8_t type, data_len; uint8_t *data; };
 #define BT_DATA_NAME_SHORTENED 8
 #define BT_DATA_UUID16_ALL 3
 #define BT_DATA_UUID16_SOME 2
+#define BT_DATA_SVC_DATA16 0x16
 struct net_buf_simple { uint8_t *data; uint16_t len; };
 struct net_buf_simple_state { uint8_t *data; uint16_t len; };
 static inline void net_buf_simple_save(struct net_buf_simple *b, struct net_buf_simple_state *s)
