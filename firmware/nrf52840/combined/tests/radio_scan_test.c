@@ -7,7 +7,7 @@ static struct k_work_delayable *queued;
 static struct bt_le_scan_cb *registered;
 static int starts, stops, creates, create_error, start_error, failures;
 static int heart_ads, camera_ads;
-static struct bt_conn fake_connection = {1};
+static struct bt_conn fake_connection = {.id = 1};
 int k_work_reschedule(struct k_work_delayable *work, int delay)
 { (void)delay; queued = work; return 0; }
 void bt_le_scan_cb_register(struct bt_le_scan_cb *callback) { registered = callback; }

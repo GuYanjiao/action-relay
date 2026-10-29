@@ -3,7 +3,7 @@
 #include "../src/watch_diag.c"
 static int scan_requests, connection_requests, released, disconnects, discoveries, finished;
 static bool scan_wanted;
-static struct bt_conn owned = {1}, foreign = {2};
+static struct bt_conn owned = {.id = 1}, foreign = {.id = 2};
 static struct bt_gatt_discover_params *last_discovery;
 void radio_scan_register(enum radio_client client, radio_advert_fn callback)
 { assert(client == RADIO_WATCH && callback); }
