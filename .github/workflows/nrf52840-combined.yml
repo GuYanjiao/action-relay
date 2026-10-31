@@ -29,7 +29,7 @@ jobs:
         run: |
           gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/nrf52840/combined/tests/fakes firmware/nrf52840/combined/tests/radio_scan_test.c -o "$RUNNER_TEMP/radio-scan-test"
           "$RUNNER_TEMP/radio-scan-test"
-          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/nrf52840/combined/tests/fakes firmware/nrf52840/combined/tests/watch_diag_test.c -o "$RUNNER_TEMP/watch-diag-test"
+          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/nrf52840/combined/tests/fakes firmware/nrf52840/combined/tests/watch_diag_test.c firmware/nrf52840/combined/src/s4_link.c -o "$RUNNER_TEMP/watch-diag-test"
           "$RUNNER_TEMP/watch-diag-test"
           gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/nrf52840/combined/tests/fakes firmware/nrf52840/combined/src/s4_link.c firmware/nrf52840/combined/tests/s4_link_test.c -o "$RUNNER_TEMP/s4-link-test"
           "$RUNNER_TEMP/s4-link-test"

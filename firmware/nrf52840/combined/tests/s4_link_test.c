@@ -37,5 +37,19 @@ int main(void)
     bt_conn_unref(heart); assert(watch.refs == 0);
     assert(s4_link_adopt(NULL, S4_CLIENT_HEART) == -EINVAL);
     assert(s4_link_acquire((enum s4_client)99, NULL) == NULL);
+    watch.state = BT_CONN_STATE_CONNECTED; watch.refs = 1;
+    assert(!s4_link_adopt(&watch, S4_CLIENT_HEART));
+    assert(!s4_link_has_other(&watch, S4_CLIENT_HEART));
+    assert(s4_link_prepare_disconnect(&watch, S4_CLIENT_HEART));
+    assert(!s4_link_acquire(S4_CLIENT_COMPANION, NULL));
+    assert(s4_link_adopt(&watch, S4_CLIENT_COMPANION) == -EBUSY);
+    s4_link_cancel_disconnect(&watch);
+    app = s4_link_acquire(S4_CLIENT_COMPANION, NULL); assert(app);
+    assert(s4_link_has_other(&watch, S4_CLIENT_HEART));
+    assert(!s4_link_prepare_disconnect(&watch, S4_CLIENT_HEART));
+    assert(s4_link_release(app, S4_CLIENT_COMPANION)); bt_conn_unref(app);
+    assert(s4_link_prepare_disconnect(&watch, S4_CLIENT_HEART));
+    assert(!s4_link_release(&watch, S4_CLIENT_HEART)); bt_conn_unref(&watch);
+    assert(watch.refs == 0);
     return 0;
 }

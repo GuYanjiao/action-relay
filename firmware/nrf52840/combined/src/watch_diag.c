@@ -10,6 +10,7 @@
 #include <zephyr/sys/byteorder.h>
 #include "radio_scan.h"
 #include "watch_diag.h"
+#include "s4_link.h"
 
 LOG_MODULE_REGISTER(watch_diag, LOG_LEVEL_INF);
 static struct bt_conn *watch_peer;
@@ -61,12 +62,19 @@ static void connected(struct bt_conn *conn, uint8_t error)
         bt_conn_unref(watch_peer); watch_peer = NULL;
         return;
     }
+    int ownership = s4_link_adopt(conn, S4_CLIENT_COMPANION);
+    if (ownership && ownership != -EALREADY) {
+        LOG_WRN("Selected watch conflicts with existing S4 link: %d", ownership);
+        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        return;
+    }
     LOG_INF("Watch diagnostic connected; run watch services then watch chars");
 }
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
     if (conn != watch_peer) return;
     LOG_INF("Watch diagnostic disconnected: %u", reason);
+    (void)s4_link_release(conn, S4_CLIENT_COMPANION);
     bt_conn_unref(watch_peer); watch_peer = NULL;
     discovering = false;
 }
@@ -137,12 +145,32 @@ bool watch_diag_command(char *line)
         else error = -EINVAL;
         if (!error) {
             radio_scan_request(RADIO_WATCH, false);
-            error = watch_peer ? -EALREADY : radio_scan_connect(RADIO_WATCH, &address, &watch_peer, create_failed);
+            if (watch_peer) error = -EALREADY;
+            else {
+                watch_peer = s4_link_acquire(S4_CLIENT_COMPANION, &address);
+                error = watch_peer ? 0 : radio_scan_connect(RADIO_WATCH, &address, &watch_peer, create_failed);
+            }
+        }
+    } else if (count == 2 && !strcmp(args[1], "attach")) {
+        if (watch_peer) error = -EALREADY;
+        else {
+            watch_peer = s4_link_acquire(S4_CLIENT_COMPANION, NULL);
+            error = watch_peer ? 0 : -ENOTCONN;
         }
     } else if (count == 2 && !strcmp(args[1], "services")) error = discover(BT_GATT_DISCOVER_PRIMARY);
     else if (count == 2 && !strcmp(args[1], "chars")) error = discover(BT_GATT_DISCOVER_CHARACTERISTIC);
-    else if (count == 2 && !strcmp(args[1], "disconnect"))
-        error = watch_peer ? bt_conn_disconnect(watch_peer, BT_HCI_ERR_REMOTE_USER_TERM_CONN) : -ENOTCONN;
+    else if (count == 2 && !strcmp(args[1], "disconnect")) {
+        if (!watch_peer) error = -ENOTCONN;
+        else if (discovering) error = -EBUSY;
+        else if (s4_link_has_other(watch_peer, S4_CLIENT_COMPANION)) {
+            (void)s4_link_release(watch_peer, S4_CLIENT_COMPANION);
+            bt_conn_unref(watch_peer); watch_peer = NULL; error = 0;
+        } else if (!s4_link_prepare_disconnect(watch_peer, S4_CLIENT_COMPANION)) error = -EBUSY;
+        else {
+            error = bt_conn_disconnect(watch_peer, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+            if (error) s4_link_cancel_disconnect(watch_peer);
+        }
+    }
     LOG_INF("Watch diagnostic command result: %d", error);
     return true;
 }

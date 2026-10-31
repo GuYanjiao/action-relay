@@ -26,6 +26,7 @@
 #include "radio_scan.h"
 #include "watch_diag.h"
 #include "camera_diag.h"
+#include "s4_link.h"
 #include "../../protocol/miwear_psa.h"
 
 LOG_MODULE_REGISTER(relay, LOG_LEVEL_INF);
@@ -87,15 +88,21 @@ HRM_SENS_PROFILE_CONFIG_DEF(relay, true, ANT_HRM_PAGE_0, profile_event);
 /* Evaluation identity: device number 4242; manufacturer 255 = development. */
 HRM_SENS_CHANNEL_CONFIG_DEF(relay, 0, 1, 4242, 0);
 
+static void heart_disconnect(struct bt_conn *conn)
+{
+    if (conn != peer || !s4_link_prepare_disconnect(conn, S4_CLIENT_HEART)) return;
+    int error = bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+    if (error) s4_link_cancel_disconnect(conn);
+}
 static void timeout_disconnect(struct bt_conn *conn, void *context)
 {
     ARG_UNUSED(context);
-    if (conn == peer) bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+    if (conn == peer) heart_disconnect(conn);
 }
 static void receive_timeout(struct k_work *work)
 {
     ARG_UNUSED(work);
-    LOG_WRN("No valid heart rate notification for 15 seconds; reconnecting");
+    LOG_WRN("No valid heart rate notification for 15 seconds; requesting link recovery");
     bt_conn_foreach(BT_CONN_TYPE_LE, timeout_disconnect, NULL);
 }
 K_WORK_DELAYABLE_DEFINE(receive_watchdog, receive_timeout);
@@ -106,7 +113,7 @@ static void subscribed(struct bt_conn *conn, uint8_t err,
     ARG_UNUSED(params);
     if (err) {
         LOG_WRN("Heart rate notification subscription rejected: %u", err);
-        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        heart_disconnect(conn);
     } else LOG_INF("Heart rate notifications enabled");
 }
 
@@ -140,13 +147,14 @@ static void profile_event(ant_hrm_profile_t *profile, ant_hrm_evt_t event)
 static uint8_t notified(struct bt_conn *conn, struct bt_gatt_subscribe_params *params,
                         const void *data, uint16_t length)
 {
-    if (!atomic_get(&ble_allowed)) return BT_GATT_ITER_STOP;
     if (!data) {
         params->value_handle = 0;
         invalidate();
-        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        heart_disconnect(conn);
         return BT_GATT_ITER_STOP;
     }
+    /* Keep the subscription alive for the companion owner during ANT standby. */
+    if (!atomic_get(&ble_allowed)) return BT_GATT_ITER_CONTINUE;
     struct hr_measurement value;
     if (!hr_parse(data, length, &value)) {
         LOG_WRN("Malformed or unsupported heart rate measurement (%u bytes)", length);
@@ -180,10 +188,9 @@ static uint8_t discovered(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                           struct bt_gatt_discover_params *params)
 {
     int err;
-    if (!atomic_get(&ble_allowed)) return BT_GATT_ITER_STOP;
     if (!attr) {
         LOG_WRN("Required heart rate attribute missing");
-        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        heart_disconnect(conn);
         return BT_GATT_ITER_STOP;
     }
     if (params->type == BT_GATT_DISCOVER_PRIMARY) {
@@ -195,7 +202,7 @@ static uint8_t discovered(struct bt_conn *conn, const struct bt_gatt_attr *attr,
     } else if (params->type == BT_GATT_DISCOVER_CHARACTERISTIC) {
         const struct bt_gatt_chrc *chrc = attr->user_data;
         if (!(chrc->properties & BT_GATT_CHRC_NOTIFY)) {
-            bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+            heart_disconnect(conn);
             return BT_GATT_ITER_STOP;
         }
         subscription.value_handle = chrc->value_handle;
@@ -210,18 +217,19 @@ static uint8_t discovered(struct bt_conn *conn, const struct bt_gatt_attr *attr,
         err = bt_gatt_subscribe(conn, &subscription);
         if (err && err != -EALREADY) {
             LOG_ERR("Subscribe failed: %d", err);
-            bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+            heart_disconnect(conn);
         } else LOG_INF("Heart rate notifications requested");
         return BT_GATT_ITER_STOP;
     }
     err = bt_gatt_discover(conn, &discovery);
     if (err) {
         LOG_ERR("Discovery failed: %d", err);
-        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        heart_disconnect(conn);
     }
     return BT_GATT_ITER_STOP;
 }
 static void scan_work_handler(struct k_work *work);
+static void heart_ready(struct bt_conn *conn);
 K_WORK_DELAYABLE_DEFINE(scan_work, scan_work_handler);
 static void connection_create_failed(int err)
 {
@@ -258,6 +266,12 @@ static void scan_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
     if (!atomic_get(&ble_allowed) || peer) return;
+    peer = s4_link_acquire(S4_CLIENT_HEART, NULL);
+    if (peer) {
+        radio_scan_request(RADIO_HEART, false);
+        heart_ready(peer);
+        return;
+    }
     radio_scan_request(RADIO_HEART, true);
     LOG_INF("Requested shared scan for BLE Heart Rate Service 180D");
 }
@@ -272,8 +286,14 @@ static void connected(struct bt_conn *conn, uint8_t err)
         k_work_reschedule(&scan_work, K_SECONDS(1));
         return;
     }
-    if (!atomic_get(&ble_allowed)) {
-        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+    heart_ready(conn);
+}
+static void heart_ready(struct bt_conn *conn)
+{
+    int ownership = s4_link_adopt(conn, S4_CLIENT_HEART);
+    if (ownership && ownership != -EALREADY) LOG_WRN("Heart link registry unavailable: %d", ownership);
+    if (!atomic_get(&ble_allowed) && !s4_link_has_other(conn, S4_CLIENT_HEART)) {
+        heart_disconnect(conn);
         return;
     }
     LOG_INF("BLE connected; discovering heart rate service");
@@ -288,12 +308,13 @@ static void connected(struct bt_conn *conn, uint8_t err)
     discovery.start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
     discovery.end_handle = BT_ATT_LAST_ATTRIBUTE_HANDLE;
     if (bt_gatt_discover(conn, &discovery))
-        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        heart_disconnect(conn);
 }
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
     if (conn != peer) return;
     LOG_INF("BLE disconnected: %u", reason);
+    (void)s4_link_release(conn, S4_CLIENT_HEART);
     atomic_clear(&ble_connected);
     k_work_cancel_delayable(&receive_watchdog);
     invalidate();
@@ -482,6 +503,12 @@ int main(void)
         if (atomic_get(&ant_overflow)) { LOG_ERR("ANT event overflow"); k_oops(); }
         int64_t now = k_uptime_get();
         camera_diag_poll((uint32_t)now);
+        /* A companion may have released a retained idle HRS connection. */
+        static int64_t next_idle_check;
+        if (now >= next_idle_check) {
+            next_idle_check = now + 1000;
+            if (!atomic_get(&ble_allowed)) bt_conn_foreach(BT_CONN_TYPE_LE, timeout_disconnect, NULL);
+        }
         k_spinlock_key_t key = k_spin_lock(&sample_lock);
         bool fresh = sample.valid && now - sample.received < STALE_MS;
         int64_t hr_received = sample.received;
