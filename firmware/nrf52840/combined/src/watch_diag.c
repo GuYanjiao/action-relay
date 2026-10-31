@@ -45,14 +45,14 @@ static bool field(struct bt_data *data, void *context)
 static void advertisement(const bt_addr_le_t *address, int8_t rssi, uint8_t type,
                            struct net_buf_simple *data)
 {
-    ARG_UNUSED(type);
+    ARG_UNUSED(type); /* Native logging fakes do not consume format arguments. */
     atomic_inc(&scan_reports);
     struct advert advert = {0};
     bt_data_parse(data, field, &advert);
     if (!advert.xiaomi && !advert.heart && !strstr(advert.name, "Watch S4")) return;
     char text[BT_ADDR_LE_STR_LEN];
     bt_addr_le_to_str(address, text, sizeof text);
-    LOG_INF("Candidate %s RSSI=%d name=%s FE95=%d HR=%d", text, rssi, advert.name, advert.xiaomi, advert.heart);
+    LOG_INF("Candidate %s RSSI=%d name=%s FE95=%d HR=%d type=0x%02x", text, rssi, advert.name, advert.xiaomi, advert.heart, type);
 }
 static void create_failed(int error) { LOG_WRN("Watch diagnostic connect failed: %d", error); }
 static void connected(struct bt_conn *conn, uint8_t error)
@@ -136,6 +136,8 @@ bool watch_diag_command(char *line)
     if (count == 2 && !strcmp(args[1], "scan")) {
         atomic_set(&scan_reports, 0);
         radio_scan_request(RADIO_WATCH, true); error = 0;
+    } else if (count == 2 && !strcmp(args[1], "status")) {
+        LOG_INF("Watch selected=%u discovering=%u channel_busy=%u", watch_peer != NULL, discovering, miwear_gatt_busy()); error = 0;
     } else if (count == 2 && !strcmp(args[1], "stop")) {
         radio_scan_request(RADIO_WATCH, false); error = 0;
         LOG_INF("Watch diagnostic advertisements received: %ld", (long)atomic_get(&scan_reports));
