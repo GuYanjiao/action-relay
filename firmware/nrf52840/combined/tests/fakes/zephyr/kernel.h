@@ -35,4 +35,8 @@ static inline void k_work_queue_start(struct k_work_q *q, void *stack, size_t si
 static inline void k_work_init_delayable(struct k_work_delayable *w, void (*fn)(struct k_work *)) { w->work.handler = fn; }
 int k_work_reschedule_for_queue(struct k_work_q *, struct k_work_delayable *, int);
 uint32_t k_uptime_get_32(void);
+struct k_msgq { uint8_t *bytes; size_t item_size; unsigned capacity, head, count; };
+#define K_MSGQ_DEFINE(name, item, slots, alignment) static uint8_t name##_storage[(item)*(slots)]; struct k_msgq name = {.bytes = name##_storage, .item_size = (item), .capacity = (slots)}
+int k_msgq_put(struct k_msgq *, const void *, int);
+int k_msgq_get(struct k_msgq *, void *, int);
 #endif

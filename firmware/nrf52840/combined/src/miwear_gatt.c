@@ -16,6 +16,7 @@ static struct k_spinlock lock;
 static struct bt_conn *connection;
 static bool initialized, pending, done, stopping, cancelled, subscribed, unsubscribing;
 static bool online;
+static uint32_t transport_generation;
 static int failure;
 static uint32_t deadline;
 static uint16_t first, last, flag_handle, rx_handle, tx_handle, ccc_handle, ccc_end;
@@ -170,7 +171,7 @@ static void pump(struct k_work *work)
     if (start) start_operation();
     if (ready) {
         LOG_INF("FE95 channel ready; flag length=%u, MTU=%u", (unsigned)flag_length, bt_gatt_get_mtu(conn));
-        if (callbacks.ready) callbacks.ready();
+        if (callbacks.ready) callbacks.ready(transport_generation);
     }
     /* Bounded fragmentation. Controller backpressure is retried without reordering. */
     for (unsigned i = 0; i < 4; ++i) {
@@ -208,7 +209,7 @@ int miwear_gatt_open(struct bt_conn *conn)
     if (bt_conn_get_info(conn, &info) || info.state != BT_CONN_STATE_CONNECTED) return -ENOTCONN;
     k_spinlock_key_t key = k_spin_lock(&lock);
     if (connection) { k_spin_unlock(&lock, key); return -EBUSY; }
-    connection = bt_conn_ref(conn); stage = SERVICE;
+    connection = bt_conn_ref(conn); stage = SERVICE; ++transport_generation;
     pending = done = stopping = cancelled = subscribed = unsubscribing = online = false;
     failure = 0; first = last = flag_handle = rx_handle = tx_handle = ccc_handle = 0;
     ccc_end = UINT16_MAX; flag_length = 0; tx_head = tx_count = 0;
@@ -220,11 +221,11 @@ void miwear_gatt_close(void)
 }
 bool miwear_gatt_busy(void)
 { k_spinlock_key_t key = k_spin_lock(&lock); bool busy = connection != NULL; k_spin_unlock(&lock, key); return busy; }
-int miwear_gatt_send(const uint8_t *bytes, size_t length)
+int miwear_gatt_send_for(uint32_t expected_generation, const uint8_t *bytes, size_t length)
 {
     if (!bytes || !length || length > sizeof tx[0].bytes) return -EINVAL;
     k_spinlock_key_t key = k_spin_lock(&lock);
-    int error = !online || stopping ? -ENOTCONN : tx_count == ARRAY_SIZE(tx) ? -EAGAIN : 0;
+    int error = !online || stopping || expected_generation != transport_generation ? -ENOTCONN : tx_count == ARRAY_SIZE(tx) ? -EAGAIN : 0;
     if (!error) {
         struct tx_frame *frame = &tx[(tx_head + tx_count) % ARRAY_SIZE(tx)];
         memcpy(frame->bytes, bytes, length); frame->length = length; frame->offset = 0;
@@ -232,6 +233,11 @@ int miwear_gatt_send(const uint8_t *bytes, size_t length)
         ++tx_count;
     }
     k_spin_unlock(&lock, key); if (!error) kick(0); return error;
+}
+int miwear_gatt_send(const uint8_t *bytes, size_t length)
+{
+    k_spinlock_key_t key = k_spin_lock(&lock); uint32_t current = transport_generation; k_spin_unlock(&lock, key);
+    return miwear_gatt_send_for(current, bytes, length);
 }
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 { ARG_UNUSED(reason); k_spinlock_key_t key = k_spin_lock(&lock); if (conn == connection) { failure = -ENOTCONN; stopping = true; online = false; } k_spin_unlock(&lock, key); kick(0); }

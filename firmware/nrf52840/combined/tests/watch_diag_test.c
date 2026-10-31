@@ -7,6 +7,8 @@ static struct bt_conn owned = {.id = 1, .state = BT_CONN_STATE_CONNECTED}, forei
 static struct bt_gatt_discover_params *last_discovery;
 static bool channel_busy;
 void miwear_gatt_init(const struct miwear_gatt_callbacks *cb) { (void)cb; }
+void miwear_runtime_init(void) { }
+int miwear_runtime_auth(const char *key) { return strlen(key) == 32 ? 0 : -EINVAL; }
 int miwear_gatt_open(struct bt_conn *conn) { assert(conn == &owned); channel_busy = true; return 0; }
 void miwear_gatt_close(void) { channel_busy = false; }
 bool miwear_gatt_busy(void) { return channel_busy; }

@@ -28,7 +28,7 @@ int bt_gatt_write_without_response(struct bt_conn *conn, uint16_t handle, const 
     if (write_error) return write_error;
     assert(sent_length + length <= sizeof sent); memcpy(sent + sent_length, data, length); sent_length += length; return 0;
 }
-static void ready(void) { ++opened; }
+static void ready(uint32_t generation) { assert(generation); ++opened; }
 static void closed(int error) { (void)error; ++closed_count; }
 static void received(const uint8_t *bytes, size_t length) { assert(length == 3 && bytes[0] == 1); ++received_count; }
 static void step(void) { pump(&worker.work); }
@@ -64,6 +64,8 @@ int main(void)
     miwear_gatt_init(&cb);
     assert(!miwear_gatt_busy()); bring_online(); assert(opened == 1 && watch.refs == 2);
     assert(miwear_gatt_open(&watch) == -EBUSY);
+    const uint8_t stale[] = {1};
+    assert(miwear_gatt_send_for(transport_generation - 1, stale, sizeof stale) == -ENOTCONN);
     uint8_t bytes[100]; for (size_t i = 0; i < sizeof bytes; ++i) bytes[i] = (uint8_t)i;
     for (int i = 0; i < 4; ++i) assert(!miwear_gatt_send(bytes, sizeof bytes));
     assert(miwear_gatt_send(bytes, sizeof bytes) == -EAGAIN);

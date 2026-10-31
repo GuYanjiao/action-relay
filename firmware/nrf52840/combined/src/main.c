@@ -27,6 +27,7 @@
 #include "watch_diag.h"
 #include "camera_diag.h"
 #include "s4_link.h"
+#include "quiet_led.h"
 #include "../../protocol/miwear_psa.h"
 
 LOG_MODULE_REGISTER(relay, LOG_LEVEL_INF);
@@ -75,6 +76,8 @@ static void usb_bootloader_check(void)
                 line[length] = 0;
                 if (!camera_diag_command(line, k_uptime_get_32()) && !watch_diag_command(line)) LOG_WRN("Unknown USB command");
             }
+            volatile char *clear = line;
+            for (size_t i = 0; i < sizeof line; ++i) clear[i] = 0;
             length = 0; discard = false;
         } else if (!discard) {
             if (length < sizeof(line) - 1) line[length++] = command;
@@ -479,6 +482,7 @@ int main(void)
     int crypto_error = miwear_psa_init();
     LOG_INF("Companion crypto init: %d; authentication not yet implemented", crypto_error);
     radio_scan_init();
+    quiet_led_init();
     radio_scan_register(RADIO_HEART, scan_result);
     watch_diag_init();
     camera_diag_init();
