@@ -49,6 +49,10 @@ int main(void)
     field(&service, &advert); assert(!advert.xiaomi && !advert.heart);
     service.data_len = 3; service_bytes[0] = 0x0d; service_bytes[1] = 0x18;
     field(&service, &advert); assert(!advert.xiaomi && advert.heart);
+    const uint8_t hrs128[] = {0xfb,0x34,0x9b,0x5f,0x80,0,0,0x80,0,0x10,0,0,0x0d,0x18,0,0};
+    struct bt_data long_uuid = {.type = BT_DATA_UUID128_ALL, .data_len = 16, .data = (uint8_t *)hrs128};
+    advert.heart = false; field(&long_uuid, &advert); assert(advert.heart);
+    advert.heart = false; long_uuid.data_len = 15; field(&long_uuid, &advert); assert(!advert.heart);
     assert(command("watch scan") && scan_requests == 0);
     watch_diag_init();
     assert(!command("other scan"));
@@ -86,5 +90,14 @@ int main(void)
     assert(command("watch disconnect") && watch_peer == NULL && disconnects == 1 && owned.refs == 2);
     assert(!s4_link_release(&owned, S4_CLIENT_HEART)); bt_conn_unref(&owned);
     assert(owned.refs == 0);
+    assert(command("watch scanall") && atomic_get(&scan_all));
+    struct net_buf_simple empty_ad = {0};
+    for (unsigned i = 0; i < 40; ++i) {
+        bt_addr_le_t address = {.type = BT_ADDR_LE_RANDOM}; address.a[0] = i;
+        advertisement(&address, -60, 0, &empty_ad);
+        advertisement(&address, -60, 0, &empty_ad);
+    }
+    assert(cache_count == 32);
+    assert(command("watch scan") && !atomic_get(&scan_all) && !cache_count);
     return 0;
 }

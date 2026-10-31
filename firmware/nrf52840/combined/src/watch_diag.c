@@ -20,10 +20,15 @@ static struct bt_gatt_discover_params discovery;
 static bool discovering;
 static bool initialized;
 static atomic_t scan_reports;
-struct advert { bool xiaomi, heart; char name[40]; };
+static atomic_t scan_all;
+static struct k_spinlock cache_lock;
+static struct { bt_addr_le_t address; unsigned types; bool named; } cache[32];
+static size_t cache_count;
+struct advert { bool xiaomi, heart; uint32_t fields; char name[40]; };
 static bool field(struct bt_data *data, void *context)
 {
     struct advert *advert = context;
+    if (data->type < 32) advert->fields |= BIT(data->type);
     if (data->type == BT_DATA_NAME_COMPLETE || data->type == BT_DATA_NAME_SHORTENED) {
         size_t n = MIN(data->data_len, sizeof(advert->name) - 1);
         memcpy(advert->name, data->data, n);
@@ -40,6 +45,18 @@ static bool field(struct bt_data *data, void *context)
         if (uuid == 0xfe95) advert->xiaomi = true;
         if (uuid == 0x180d) advert->heart = true;
     }
+    if (data->type == BT_DATA_UUID128_ALL || data->type == BT_DATA_UUID128_SOME || data->type == BT_DATA_SVC_DATA128) {
+        const uint8_t base[] = {0xfb,0x34,0x9b,0x5f,0x80,0,0,0x80,0,0x10,0,0};
+        for (size_t offset = 0; offset + 16 <= data->data_len; offset += 16) {
+            const uint8_t *uuid = data->data + offset;
+            if (!memcmp(uuid, base, sizeof base) && !uuid[14] && !uuid[15]) {
+                uint16_t value = sys_get_le16(uuid + 12);
+                if (value == 0xfe95) advert->xiaomi = true;
+                if (value == 0x180d) advert->heart = true;
+            }
+            if (data->type == BT_DATA_SVC_DATA128) break;
+        }
+    }
     return true;
 }
 static void advertisement(const bt_addr_le_t *address, int8_t rssi, uint8_t type,
@@ -49,10 +66,23 @@ static void advertisement(const bt_addr_le_t *address, int8_t rssi, uint8_t type
     atomic_inc(&scan_reports);
     struct advert advert = {0};
     bt_data_parse(data, field, &advert);
-    if (!advert.xiaomi && !advert.heart && !strstr(advert.name, "Watch S4")) return;
+    if (!atomic_get(&scan_all) && !advert.xiaomi && !advert.heart && !strstr(advert.name, "Watch S4")) return;
+    if (atomic_get(&scan_all)) {
+        k_spinlock_key_t key = k_spin_lock(&cache_lock);
+        size_t index;
+        for (index = 0; index < cache_count; ++index) if (!bt_addr_le_cmp(address, &cache[index].address)) break;
+        if (index == cache_count && cache_count == ARRAY_SIZE(cache)) { k_spin_unlock(&cache_lock, key); return; }
+        if (index == cache_count) { cache[index].address = *address; ++cache_count; }
+        bool report = type < 8 && !(cache[index].types & BIT(type));
+        report = report || (!cache[index].named && advert.name[0]);
+        if (type < 8) cache[index].types |= BIT(type);
+        if (advert.name[0]) cache[index].named = true;
+        k_spin_unlock(&cache_lock, key);
+        if (!report) return;
+    }
     char text[BT_ADDR_LE_STR_LEN];
     bt_addr_le_to_str(address, text, sizeof text);
-    LOG_INF("Candidate %s RSSI=%d name=%s FE95=%d HR=%d type=0x%02x", text, rssi, advert.name, advert.xiaomi, advert.heart, type);
+    LOG_INF("Candidate %s RSSI=%d name=%s FE95=%d HR=%d type=0x%02x AD=0x%08x", text, rssi, advert.name, advert.xiaomi, advert.heart, type, (unsigned)advert.fields);
 }
 static void create_failed(int error) { LOG_WRN("Watch diagnostic connect failed: %d", error); }
 static void connected(struct bt_conn *conn, uint8_t error)
@@ -133,7 +163,11 @@ bool watch_diag_command(char *line)
     if (!count || strcmp(args[0], "watch")) return false;
     if (!initialized) { LOG_WRN("BLE diagnostics are not initialized"); return true; }
     int error = -EINVAL;
-    if (count == 2 && !strcmp(args[1], "scan")) {
+    if (count == 2 && (!strcmp(args[1], "scan") || !strcmp(args[1], "scanall"))) {
+        k_spinlock_key_t key = k_spin_lock(&cache_lock);
+        memset(cache, 0, sizeof cache); cache_count = 0;
+        atomic_set(&scan_all, !strcmp(args[1], "scanall"));
+        k_spin_unlock(&cache_lock, key);
         atomic_set(&scan_reports, 0);
         radio_scan_request(RADIO_WATCH, true); error = 0;
     } else if (count == 2 && !strcmp(args[1], "status")) {
