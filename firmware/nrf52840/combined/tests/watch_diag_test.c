@@ -56,6 +56,8 @@ int main(void)
     assert(command("watch chars") && discoveries == 1); /* no discovery overwrite */
     last_discovery->func(&owned, NULL, last_discovery);
     assert(command("watch chars") && discoveries == 2);
+    assert(command("watch disconnect") && disconnects == 0); /* discovery still borrows its parameters */
+    last_discovery->func(&owned, NULL, last_discovery);
     watch_diagnostic_callbacks.disconnected(&foreign, 0); assert(owned.refs == 2);
     assert(command("watch disconnect") && disconnects == 1);
     watch_diagnostic_callbacks.disconnected(&owned, 0); assert(owned.refs == 0);
