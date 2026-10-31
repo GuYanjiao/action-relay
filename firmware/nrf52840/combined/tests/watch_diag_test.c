@@ -5,6 +5,11 @@ static int scan_requests, connection_requests, released, disconnects, discoverie
 static bool scan_wanted;
 static struct bt_conn owned = {.id = 1, .state = BT_CONN_STATE_CONNECTED}, foreign = {.id = 2};
 static struct bt_gatt_discover_params *last_discovery;
+static bool channel_busy;
+void miwear_gatt_init(const struct miwear_gatt_callbacks *cb) { (void)cb; }
+int miwear_gatt_open(struct bt_conn *conn) { assert(conn == &owned); channel_busy = true; return 0; }
+void miwear_gatt_close(void) { channel_busy = false; }
+bool miwear_gatt_busy(void) { return channel_busy; }
 void radio_scan_register(enum radio_client client, radio_advert_fn callback)
 { assert(client == RADIO_WATCH && callback); }
 void radio_scan_request(enum radio_client client, bool wanted)
@@ -70,6 +75,9 @@ int main(void)
     assert(!s4_link_adopt(&owned, S4_CLIENT_HEART));
     assert(command("watch attach") && watch_peer == &owned && owned.refs == 3);
     assert(connection_requests == 2);
+    assert(command("watch channel") && channel_busy);
+    assert(command("watch disconnect") && watch_peer == &owned && disconnects == 1);
+    assert(command("watch unchannel") && !channel_busy);
     assert(command("watch services"));
     assert(command("watch disconnect") && watch_peer == &owned && disconnects == 1); // busy discovery
     last_discovery->func(&owned, NULL, last_discovery);

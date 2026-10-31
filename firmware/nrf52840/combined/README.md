@@ -19,10 +19,14 @@ watch attach
 watch connect AA:BB:CC:DD:EE:FF random
 watch services
 watch chars
+watch channel
+watch unchannel
 watch disconnect
 ```
 
 `watch attach` 复用现有心率连接；指定地址连接也优先复用匹配连接。反方向上，踏频唤醒心率功能时优先复用已选手表的配套连接。心率待机或超时不会主动断开仍被配套端占用的链路，待机时忽略心率数据；配套端退出后，闲置链路由主循环收尾。这里保持 HRS 订阅对象直到物理断开，避免待机时退订后立即重用参数。诊断发现未完成时拒绝手动分离。真实断线仍清空两端所有权，错误恢复的实机行为待验证。
+
+`watch channel` 在已选连接中发现 FE95，核对 0050 的读取属性、005E 的通知属性和 005F 的无响应写入属性，在 005E 自己的描述符范围内查找 CCC，读取 0050 后才订阅通知。适配层用独立工作队列，支持最多 4 个完整帧的有界发送和 MTU 分块；目前 USB 命令只打开通道，不发送认证或应用数据。`watch unchannel` 请求关闭，必须等在途请求/退订的终止回调完成才释放引用并允许重新打开；关闭期间拒绝诊断分离和并行枚举。没有把取消请求当作可立即复用参数的信号，参照 [Zephyr GATT 生命周期约定](https://docs.zephyrproject.org/latest/doxygen/html/group__bt__gatt__client.html)。
 
 只连接用户核实的实际手表地址，类型按广播中的 public/random 选择。扫描候选条件为 S4 名称、FE95 或 HRS，条件本身不能证明设备身份。等连接成功再枚举服务，等完成后再枚举特征，核对完整 UUID 与权限。8df62b6 的该命令集已通过组合云端构建，并在本机 S4 实测发现 FE95、0050/005E/005F 和同连接中的 HRS；不代表认证或应用通道已接通。心率仍按原踏频策略触发，诊断需求独立登记。
 

@@ -35,6 +35,8 @@ jobs:
           "$RUNNER_TEMP/s4-link-test"
           gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/nrf52840/combined/tests/fakes firmware/nrf52840/combined/tests/camera_diag_test.c -o "$RUNNER_TEMP/camera-diag-test"
           "$RUNNER_TEMP/camera-diag-test"
+          gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -Ifirmware/nrf52840/combined/tests/fakes firmware/nrf52840/combined/tests/miwear_gatt_test.c -o "$RUNNER_TEMP/miwear-gatt-test"
+          "$RUNNER_TEMP/miwear-gatt-test"
       - name: Check MiWear framing across split and merged notifications
         run: |
           gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer firmware/nrf52840/protocol/miwear_l1.c firmware/nrf52840/protocol/tests/l1_test.c -o "$RUNNER_TEMP/miwear-l1-test"

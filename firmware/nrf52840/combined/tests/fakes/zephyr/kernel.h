@@ -27,4 +27,12 @@ struct k_work { void (*handler)(struct k_work *); };
 struct k_work_delayable { struct k_work work; };
 #define K_WORK_DELAYABLE_DEFINE(name, callback) struct k_work_delayable name = {{callback}}
 int k_work_reschedule(struct k_work_delayable *, int);
+struct k_work_q { int unused; };
+#define K_THREAD_STACK_DEFINE(name, size) uint8_t name[size]
+#define K_THREAD_STACK_SIZEOF(name) sizeof(name)
+static inline void k_work_queue_start(struct k_work_q *q, void *stack, size_t size, int priority, void *config)
+{ (void)q; (void)stack; (void)size; (void)priority; (void)config; }
+static inline void k_work_init_delayable(struct k_work_delayable *w, void (*fn)(struct k_work *)) { w->work.handler = fn; }
+int k_work_reschedule_for_queue(struct k_work_q *, struct k_work_delayable *, int);
+uint32_t k_uptime_get_32(void);
 #endif

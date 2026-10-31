@@ -11,6 +11,7 @@
 #include "radio_scan.h"
 #include "watch_diag.h"
 #include "s4_link.h"
+#include "miwear_gatt.h"
 
 LOG_MODULE_REGISTER(watch_diag, LOG_LEVEL_INF);
 static struct bt_conn *watch_peer;
@@ -115,7 +116,7 @@ static int discover(uint8_t type)
     return error;
 }
 void watch_diag_init(void)
-{ radio_scan_register(RADIO_WATCH, advertisement); initialized = true; }
+{ miwear_gatt_init(NULL); radio_scan_register(RADIO_WATCH, advertisement); initialized = true; }
 bool watch_diag_command(char *line)
 {
     char *args[5], *cursor = line;
@@ -157,11 +158,13 @@ bool watch_diag_command(char *line)
             watch_peer = s4_link_acquire(S4_CLIENT_COMPANION, NULL);
             error = watch_peer ? 0 : -ENOTCONN;
         }
-    } else if (count == 2 && !strcmp(args[1], "services")) error = discover(BT_GATT_DISCOVER_PRIMARY);
-    else if (count == 2 && !strcmp(args[1], "chars")) error = discover(BT_GATT_DISCOVER_CHARACTERISTIC);
+    } else if (count == 2 && !strcmp(args[1], "channel")) error = !watch_peer ? -ENOTCONN : discovering ? -EBUSY : miwear_gatt_open(watch_peer);
+    else if (count == 2 && !strcmp(args[1], "unchannel")) { miwear_gatt_close(); error = 0; }
+    else if (count == 2 && !strcmp(args[1], "services")) error = miwear_gatt_busy() ? -EBUSY : discover(BT_GATT_DISCOVER_PRIMARY);
+    else if (count == 2 && !strcmp(args[1], "chars")) error = miwear_gatt_busy() ? -EBUSY : discover(BT_GATT_DISCOVER_CHARACTERISTIC);
     else if (count == 2 && !strcmp(args[1], "disconnect")) {
         if (!watch_peer) error = -ENOTCONN;
-        else if (discovering) error = -EBUSY;
+        else if (discovering || miwear_gatt_busy()) error = -EBUSY;
         else if (s4_link_has_other(watch_peer, S4_CLIENT_COMPANION)) {
             (void)s4_link_release(watch_peer, S4_CLIENT_COMPANION);
             bt_conn_unref(watch_peer); watch_peer = NULL; error = 0;
