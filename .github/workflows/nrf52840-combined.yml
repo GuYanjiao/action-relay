@@ -121,12 +121,13 @@ jobs:
           import json, os, pathlib, subprocess
           root=pathlib.Path(os.environ['RUNNER_TEMP'])
           revision=lambda p: subprocess.check_output(['git','rev-parse','HEAD'],cwd=p,text=True).strip()
-          meta={'phase':'combined-readonly-diagnostics','commit':os.environ['GITHUB_SHA'],
+          meta={'phase':'combined-companion-auth-diagnostics','commit':os.environ['GITHUB_SHA'],
                 'board':'promicro_nrf52840/nrf52840/uf2','ncs':'3.2.4','ant':'2.1.1',
                 'ncsCommit':revision(root/'ncs/nrf'),'antCommit':revision(root/'ant'),
                 'nanopbCommit':revision(root/'ncs/modules/lib/nanopb'),
                 'hardwareTested':False,'cameraControlImplemented':False,
-                'authenticationImplemented':False,'heartRateBaselineRetained':True,
+                'authenticationImplemented':True,'heartRateBaselineRetained':True,
+                'authenticationHardwareValidated':False,'authKeyIncluded':False,
                 'watchDiagnosticsImplemented':True}
           pathlib.Path('build-info.json').write_text(json.dumps(meta,indent=2)+'\n')
           PY

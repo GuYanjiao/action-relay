@@ -74,7 +74,7 @@ static void usb_bootloader_check(void)
         } else if (command == '\r' || command == '\n') {
             if (length && !discard) {
                 line[length] = 0;
-                if (!camera_diag_command(line, k_uptime_get_32()) && !watch_diag_command(line)) LOG_WRN("Unknown USB command");
+                if (!quiet_led_command(line) && !camera_diag_command(line, k_uptime_get_32()) && !watch_diag_command(line)) LOG_WRN("Unknown USB command");
             }
             volatile char *clear = line;
             for (size_t i = 0; i < sizeof line; ++i) clear[i] = 0;
@@ -480,7 +480,7 @@ int main(void)
     err = bt_enable(NULL);
     if (err) startup_error("BLE", err);
     int crypto_error = miwear_psa_init();
-    LOG_INF("Companion crypto init: %d; authentication not yet implemented", crypto_error);
+    LOG_INF("Companion crypto init: %d; one-use USB authentication available", crypto_error);
     radio_scan_init();
     quiet_led_init();
     radio_scan_register(RADIO_HEART, scan_result);
