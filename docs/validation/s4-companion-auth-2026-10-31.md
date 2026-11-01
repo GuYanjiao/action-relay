@@ -42,3 +42,11 @@ f9731beaf2b6481aad9e6b90886adccf5857a6a097e807ae9332829d90111a2f
 - 完整扫描找到身份后缀匹配的可连接 HRS 候选并连接成功，随后 FE95 适配器返回 -2。该返回值可来自服务、所需特征或 CCC 缺失，现有日志不能确定阶段；没有发送真实 Key。这不同于此前非连接广播造成的 HCI 创建超时。
 - 11月1日重新连接 USB 后，12秒全扫描未看到目标广播，上次核实的私有地址单次建连超时。只连接已核实的目标，没有连接附近匿名 FE95 设备。原始扫描、地址和服务日志均留仓库外。
 - 增加通道关闭阶段、已发现句柄与读取/订阅 ATT 错误元数据；不打印能力字段内容、身份、密钥、认证数据或应用负载。新增代码待云端检查，不把它记作已部署或互通完成。
+
+### CCC 阶段实机定位
+
+6c14c4b / [41271649659](https://github.com/GuYanjiao/action-relay/actions/runs/41271649659) 全部云端检查通过。核对产物、应用分区并备份到仓库外 nrf52840-before-auth-20261101-120946 后刷入，USB 正常，红灯关闭。
+
+用户重新启动心率广播后已连接，并重新发现 FE95、HRS 及0050/005E/005F。新增日志确认关闭阶段为 ccc，service=0x0013..0x001a、flag=0x0014、rx=0x0016、tx=0x0019、ccc=0。这定位为 Find Information 路径没有找到 CCC，并非 FE95 服务不存在或认证拒绝。
+
+增加一次标准描述符 Read By Type 查询，仍限定在已发现的接收特征与下一特征之间；两条路径都查不到时终止，不硬编码 CCC、不盲订阅。Zephyr 的 [GATT 实现](https://github.com/zephyrproject-rtos/zephyr/blob/v4.3.0/subsys/bluetooth/host/gatt.c) 将 BT_GATT_DISCOVER_STD_CHAR_DESC 映射到 Read By Type。增加备用查询成功和两条查询均缺失的云端回归，代码和实机结果待后续确认。

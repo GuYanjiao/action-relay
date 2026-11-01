@@ -10,7 +10,7 @@
 #include "miwear_gatt.h"
 #include "../../protocol/miwear_l1.h"
 LOG_MODULE_REGISTER(miwear_gatt, LOG_LEVEL_INF);
-enum stage { IDLE, SERVICE, CHARACTERISTICS, CCC, FLAG, SUBSCRIBE, ONLINE };
+enum stage { IDLE, SERVICE, CHARACTERISTICS, CCC, CCC_BY_TYPE, FLAG, SUBSCRIBE, ONLINE };
 static enum stage stage;
 static struct k_spinlock lock;
 static struct bt_conn *connection;
@@ -39,6 +39,7 @@ static const char *stage_name(enum stage value)
     case SERVICE: return "service";
     case CHARACTERISTICS: return "characteristics";
     case CCC: return "ccc";
+    case CCC_BY_TYPE: return "ccc-by-type";
     case FLAG: return "flag-read";
     case SUBSCRIBE: return "subscribe";
     case ONLINE: return "online";
@@ -74,7 +75,7 @@ static uint8_t discovered(struct bt_conn *conn, const struct bt_gatt_attr *attr,
         if (!bt_uuid_cmp(value->uuid, &flag_uuid.uuid) && (value->properties & BT_GATT_CHRC_READ)) flag_handle = value->value_handle;
         if (!bt_uuid_cmp(value->uuid, &rx_uuid.uuid) && (value->properties & BT_GATT_CHRC_NOTIFY)) rx_handle = value->value_handle;
         if (!bt_uuid_cmp(value->uuid, &tx_uuid.uuid) && (value->properties & BT_GATT_CHRC_WRITE_WITHOUT_RESP)) tx_handle = value->value_handle;
-    } else if (!stop && stage == CCC) { ccc_handle = attr->handle; stop = true; }
+    } else if (!stop && (stage == CCC || stage == CCC_BY_TYPE)) { ccc_handle = attr->handle; stop = true; }
     k_spin_unlock(&lock, key);
     if (stop) { finish_operation(0); return BT_GATT_ITER_STOP; }
     return BT_GATT_ITER_CONTINUE;
@@ -115,13 +116,14 @@ static void subscription_done(struct bt_conn *conn, uint8_t error, struct bt_gat
 static void start_operation(void)
 {
     int error = -EINVAL;
-    if (stage == SERVICE || stage == CHARACTERISTICS || stage == CCC) {
+    if (stage == SERVICE || stage == CHARACTERISTICS || stage == CCC || stage == CCC_BY_TYPE) {
         memset(&discovery, 0, sizeof discovery);
         discovery.func = discovered;
-        discovery.type = stage == SERVICE ? BT_GATT_DISCOVER_PRIMARY : stage == CHARACTERISTICS ? BT_GATT_DISCOVER_CHARACTERISTIC : BT_GATT_DISCOVER_DESCRIPTOR;
-        discovery.start_handle = stage == SERVICE ? BT_ATT_FIRST_ATTRIBUTE_HANDLE : stage == CCC ? rx_handle + 1 : first;
-        discovery.end_handle = stage == SERVICE ? BT_ATT_LAST_ATTRIBUTE_HANDLE : stage == CCC ? ccc_end : last;
-        discovery.uuid = stage == SERVICE ? &service_uuid.uuid : stage == CCC ? BT_UUID_GATT_CCC : NULL;
+        bool descriptor = stage == CCC || stage == CCC_BY_TYPE;
+        discovery.type = stage == SERVICE ? BT_GATT_DISCOVER_PRIMARY : stage == CHARACTERISTICS ? BT_GATT_DISCOVER_CHARACTERISTIC : stage == CCC_BY_TYPE ? BT_GATT_DISCOVER_STD_CHAR_DESC : BT_GATT_DISCOVER_DESCRIPTOR;
+        discovery.start_handle = stage == SERVICE ? BT_ATT_FIRST_ATTRIBUTE_HANDLE : descriptor ? rx_handle + 1 : first;
+        discovery.end_handle = stage == SERVICE ? BT_ATT_LAST_ATTRIBUTE_HANDLE : descriptor ? ccc_end : last;
+        discovery.uuid = stage == SERVICE ? &service_uuid.uuid : descriptor ? BT_UUID_GATT_CCC : NULL;
         error = bt_gatt_discover(connection, &discovery);
     } else if (stage == FLAG) {
         memset(&read_params, 0, sizeof read_params);
@@ -150,7 +152,14 @@ static void pump(struct k_work *work)
         if (!stopping && !failure) {
             if (stage == SERVICE && (!first || first > last)) failure = -ENOENT;
             else if (stage == CHARACTERISTICS && (!flag_handle || !rx_handle || !tx_handle || rx_handle >= ccc_end)) failure = -ENOENT;
-            else if (stage == CCC && !ccc_handle) failure = -ENOENT;
+            /* Some peers expose the CCC via Read By Type but return no result
+             * to Find Information. Query the same characteristic bounds once;
+             * never guess a handle or search into the next characteristic. */
+            else if (stage == CCC) stage = ccc_handle ? FLAG : CCC_BY_TYPE;
+            else if (stage == CCC_BY_TYPE) {
+                if (!ccc_handle) failure = -ENOENT;
+                else stage = FLAG;
+            }
             else if (stage == FLAG && !flag_length) failure = -EPROTO;
             else stage++;
         }
