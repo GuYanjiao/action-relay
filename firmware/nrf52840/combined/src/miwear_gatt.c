@@ -33,6 +33,18 @@ static struct miwear_gatt_callbacks callbacks;
 static struct k_work_q queue;
 K_THREAD_STACK_DEFINE(transport_stack, 4096);
 static struct k_work_delayable worker;
+static const char *stage_name(enum stage value)
+{
+    switch (value) {
+    case SERVICE: return "service";
+    case CHARACTERISTICS: return "characteristics";
+    case CCC: return "ccc";
+    case FLAG: return "flag-read";
+    case SUBSCRIBE: return "subscribe";
+    case ONLINE: return "online";
+    default: return "idle";
+    }
+}
 struct tx_frame { size_t length, offset; uint8_t bytes[MIWEAR_L1_HEADER + MIWEAR_L1_MAX_PAYLOAD]; };
 static struct tx_frame tx[4];
 static unsigned tx_head, tx_count;
@@ -71,7 +83,10 @@ static uint8_t read_flag(struct bt_conn *conn, uint8_t error, struct bt_gatt_rea
     const void *data, uint16_t length)
 {
     ARG_UNUSED(conn); ARG_UNUSED(params);
-    if (error || !data) { finish_operation(error ? -EIO : 0); return BT_GATT_ITER_STOP; }
+    if (error || !data) {
+        if (error) LOG_WRN("FE95 flag read ATT error=0x%02x", error);
+        finish_operation(error ? -EIO : 0); return BT_GATT_ITER_STOP;
+    }
     k_spinlock_key_t key = k_spin_lock(&lock);
     bool overflow = length > sizeof flag_bytes - flag_length;
     if (!overflow) { memcpy(flag_bytes + flag_length, data, length); flag_length += length; }
@@ -92,7 +107,11 @@ static uint8_t notified(struct bt_conn *conn, struct bt_gatt_subscribe_params *p
     return BT_GATT_ITER_CONTINUE;
 }
 static void subscription_done(struct bt_conn *conn, uint8_t error, struct bt_gatt_subscribe_params *params)
-{ ARG_UNUSED(conn); ARG_UNUSED(params); finish_operation(error ? -EIO : 0); }
+{
+    ARG_UNUSED(conn); ARG_UNUSED(params);
+    if (error) LOG_WRN("FE95 subscription ATT error=0x%02x", error);
+    finish_operation(error ? -EIO : 0);
+}
 static void start_operation(void)
 {
     int error = -EINVAL;
@@ -159,6 +178,10 @@ static void pump(struct k_work *work)
         if (error) { key = k_spin_lock(&lock); unsubscribing = false; k_spin_unlock(&lock, key); }
     }
     if (release) {
+        /* Metadata only: distinguish missing service/characteristic/CCC without
+         * logging device identity, flag contents, authentication or app data. */
+        LOG_INF("FE95 channel closing: stage=%s reason=%d service=0x%04x..0x%04x flag=0x%04x rx=0x%04x tx=0x%04x ccc=0x%04x",
+            stage_name(current), reason, first, last, flag_handle, rx_handle, tx_handle, ccc_handle);
         key = k_spin_lock(&lock);
         connection = NULL; stage = IDLE; online = false; tx_count = 0;
         memset(tx, 0, sizeof tx);
