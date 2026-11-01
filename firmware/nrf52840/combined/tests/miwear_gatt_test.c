@@ -39,7 +39,7 @@ static void characteristic(uint16_t uuid, uint16_t handle, uint16_t value_handle
     struct bt_gatt_attr attr = {.handle = handle, .user_data = &chrc};
     assert(discovery.func(&watch, &attr, &discovery) == BT_GATT_ITER_CONTINUE);
 }
-static void bring_online(bool typed_ccc)
+static void bring_online(void)
 {
     assert(!miwear_gatt_open(&watch)); step(); assert(stage == SERVICE);
     struct bt_gatt_service_val service = {.end_handle = 0x1a};
@@ -51,11 +51,10 @@ static void bring_online(bool typed_ccc)
     characteristic(0x5f, 0x18, 0x19, BT_GATT_CHRC_WRITE_WITHOUT_RESP);
     discovery.func(&watch, NULL, &discovery); step();
     assert(stage == CCC && discovery.start_handle == 0x17 && discovery.end_handle == 0x17);
-    if (typed_ccc) {
-        discovery.func(&watch, NULL, &discovery); step();
-        assert(stage == CCC_BY_TYPE && discovery.type == BT_GATT_DISCOVER_STD_CHAR_DESC);
-        assert(discovery.uuid == BT_UUID_GATT_CCC && discovery.start_handle == 0x17 && discovery.end_handle == 0x17);
-    }
+    // The async response still needs this UUID after start_operation returns.
+    // A BT_UUID_GATT_CCC block-scope compound literal is not stable storage.
+    assert(discovery.uuid == &ccc_uuid.uuid);
+    assert(!bt_uuid_cmp(discovery.uuid, BT_UUID_GATT_CCC));
     attr.handle = 0x17; attr.user_data = NULL;
     discovery.func(&watch, &attr, &discovery); step(); assert(stage == FLAG);
     const uint8_t flag[] = {1,2};
@@ -67,7 +66,7 @@ int main(void)
 {
     const struct miwear_gatt_callbacks cb = {.ready = ready, .closed = closed, .received = received};
     miwear_gatt_init(&cb);
-    assert(!miwear_gatt_busy()); bring_online(false); assert(opened == 1 && watch.refs == 2);
+    assert(!miwear_gatt_busy()); bring_online(); assert(opened == 1 && watch.refs == 2);
     assert(miwear_gatt_open(&watch) == -EBUSY);
     const uint8_t stale[] = {1};
     assert(miwear_gatt_send_for(transport_generation - 1, stale, sizeof stale) == -ENOTCONN);
@@ -98,23 +97,5 @@ int main(void)
     assert(!miwear_gatt_open(&watch)); step(); clock_ms = 15000; step(); assert(miwear_gatt_busy());
     assert(cancels == 2); discovery.func(&watch, NULL, &discovery); step(); assert(!miwear_gatt_busy());
     assert(watch.refs == 1);
-    // Read By Type may recover a CCC missing from Find Information, within
-    // exactly the same bounds and with the usual read/subscribe lifecycle.
-    bring_online(true); assert(opened == 2);
-    miwear_gatt_close(); step(); subscription.notify(&watch, &subscription, NULL, 0); step();
-    assert(!miwear_gatt_busy() && watch.refs == 1);
-    // Neither query finds a CCC: do not read the flag or subscribe blindly.
-    old_reads = reads; old_subscriptions = subscriptions;
-    assert(!miwear_gatt_open(&watch)); step();
-    attr.handle = 0x12; attr.user_data = &service;
-    discovery.func(&watch, &attr, &discovery); step();
-    characteristic(0x50, 0x13, 0x14, BT_GATT_CHRC_READ);
-    characteristic(0x5e, 0x15, 0x16, BT_GATT_CHRC_NOTIFY);
-    characteristic(0x5f, 0x18, 0x19, BT_GATT_CHRC_WRITE_WITHOUT_RESP);
-    discovery.func(&watch, NULL, &discovery); step();
-    discovery.func(&watch, NULL, &discovery); step(); assert(stage == CCC_BY_TYPE);
-    discovery.func(&watch, NULL, &discovery); step();
-    assert(!miwear_gatt_busy() && watch.refs == 1);
-    assert(reads == old_reads && subscriptions == old_subscriptions);
     return 0;
 }

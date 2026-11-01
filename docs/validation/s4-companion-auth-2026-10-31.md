@@ -49,4 +49,8 @@ f9731beaf2b6481aad9e6b90886adccf5857a6a097e807ae9332829d90111a2f
 
 用户重新启动心率广播后已连接，并重新发现 FE95、HRS 及0050/005E/005F。新增日志确认关闭阶段为 ccc，service=0x0013..0x001a、flag=0x0014、rx=0x0016、tx=0x0019、ccc=0。这定位为 Find Information 路径没有找到 CCC，并非 FE95 服务不存在或认证拒绝。
 
-增加一次标准描述符 Read By Type 查询，仍限定在已发现的接收特征与下一特征之间；两条路径都查不到时终止，不硬编码 CCC、不盲订阅。Zephyr 的 [GATT 实现](https://github.com/zephyrproject-rtos/zephyr/blob/v4.3.0/subsys/bluetooth/host/gatt.c) 将 BT_GATT_DISCOVER_STD_CHAR_DESC 映射到 Read By Type。增加备用查询成功和两条查询均缺失的云端回归，代码和实机结果待后续确认。
+2485f4d 曾增加有界 Read By Type 备用查询；[41272193949](https://github.com/GuYanjiao/action-relay/actions/runs/41272193949) 在新测试的 UUID 地址比较断言失败，未构建 ARM，更未刷入。该测试不应比较两个独立复合字面量的指针。
+
+回查实际代码发现更直接的问题：start_operation 将 BT_UUID_GATT_CCC 宏创建的块作用域对象地址保存到异步 discovery.uuid，返回后对象生命周期结束；Zephyr 的异步响应仍会使用该指针进行 UUID 比较。[官方 UUID 宏定义](https://github.com/zephyrproject-rtos/zephyr/blob/v4.3.0/include/zephyr/bluetooth/uuid.h) 与 [GATT 响应实现](https://github.com/zephyrproject-rtos/zephyr/blob/v4.3.0/subsys/bluetooth/host/gatt.c) 支持这一代码判断。
+
+当前修复改为文件作用域静态 const CCC UUID，回归要求异步参数引用该持久对象并核对 UUID 值。移除尚无必要性证据的备用查询，保留具体阶段日志。修复的云端与实机结果待记录；不把生命周期问题已修复直接等同于真实通道已恢复。
