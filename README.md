@@ -4,6 +4,15 @@
 
 [下载安装包](https://github.com/GuYanjiao/action-relay/releases/latest) · [使用与开发文档](docs/development.md) · [第三方说明](THIRD_PARTY_NOTICES.txt)
 
+## 两个独立仓库
+
+| 版本 | 仓库 | 中转设备 | 发布内容 |
+| --- | --- | --- | --- |
+| 手机中转版 | **本仓库 action-relay** | Android 手机 | APK + RPK，正式 Release |
+| 开发板实验版 | [action-relay-nrf52840](https://github.com/GuYanjiao/action-relay-nrf52840) | nRF52840 | UF2 + 配套 RPK，预发布版 |
+
+本仓库只开发和发布手机中转版。开发板版尚未完成 Action 4 控制；对应源码、问题和构建已迁往独立仓库。
+
 ## 功能
 
 ### 手腕上的相机遥控器
@@ -58,5 +67,6 @@ Xiaomi Watch S4  ←→  Android 手机  ←→  DJI Osmo Action 4
 
 - [开发文档与消息契约](docs/development.md)
 - [相机状态与协议字段](docs/dji-watch-telemetry.md)
+- [自动版本与发布](docs/releasing.md)
 - [构建工作流](.github/workflows)
 - [DJI 官方 R SDK 示例](https://github.com/dji-sdk/Osmo-GPS-Controller-Demo)

@@ -26,7 +26,12 @@ This repository is the writable project. A separate ChatGPT project `sources/` m
 ## Validation
 
 - Run scripts/test.ps1 and APK/RPK integration builds in GitHub Actions, not on the local machine. Local review may parse scripts and inspect diffs without compiling.
-- Cloud builds must restore the user's fixed Android release keystore from GitHub Actions Secrets and sign both packages with that certificate. Fail if signing inputs are missing or the certificate fingerprint differs; never fall back to a newly generated test key. Git OpenPGP signing is independent and stays local.
+- Cloud builds must restore the user's fixed Android release keystore from GitHub Actions Secrets and sign both packages with that certificate. Fail if signing inputs are missing or the certificate fingerprint differs; never fall back to a newly generated test key. Git OpenPGP signing is independent; cloud tag signing is explicitly authorized below.
 - A build or mock test is not hardware proof. Report camera stop/save behavior, phone-watch communication, phone GNSS quality and GPS data embedded in video as separate hardware checks.
 - Avoid unbounded status/telemetry queues. Coalesce old GPS/status samples; prioritize control and terminal results.
 - For exported UI previews clearly label them as layout previews unless rendered by the actual runtime.
+
+## Repository ownership and releases (2026-11-05)
+
+This repository is phone relay only. Firmware and board-specific watch development belong in GuYanjiao/action-relay-nrf52840.
+Automatic release versions are stamped in the CI checkout, never committed by a bot. Main publishes only after all required builds and regressions succeed. The user explicitly authorized cloud GPG signing on 2026-11-05; its private key stays in Actions Secrets and a temporary runner keyring. Preserve the fixed installation certificate. Cloud-only build/test rules still apply.

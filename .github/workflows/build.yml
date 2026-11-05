@@ -1,10 +1,20 @@
 name: Build packages
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: ''
+      version_code:
+        type: number
+        default: 0
+      artifact_name:
+        type: string
+        default: ''
   workflow_dispatch:
   push:
-    branches: [main, 'work/**']
-    tags: ['v*']
+    branches: ['work/**']
 
 permissions:
   contents: read
@@ -20,6 +30,15 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: '.node-version'
+      - name: Stamp automatic package versions
+        if: inputs.version != ''
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+        run: node scripts/stamp-version.mjs "$env:RELEASE_VERSION" "$env:RELEASE_VERSION_CODE"
       - name: Validate signing configuration and versions
         shell: pwsh
         env:
@@ -107,7 +126,7 @@ jobs:
           Remove-SigningFile $env:GITHUB_WORKSPACE '.temp_watch/sign/debug/private.pem'
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: action-relay-${{ env.VERSION_NAME }}-${{ github.sha }}
+          name: ${{ inputs.artifact_name || format('action-relay-{0}-{1}', env.VERSION_NAME, github.sha) }}
           if-no-files-found: error
           retention-days: 30
           path: |

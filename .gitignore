@@ -22,3 +22,7 @@ local.*
 .temp_*/
 
 firmware/nrf52840/protocol/tests/vectors.h
+
+release-input/
+release-assets/
+release-notes.md

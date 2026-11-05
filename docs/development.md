@@ -11,11 +11,11 @@ Action Relay 由两部分组成：
 
 Android 字节码目标使用 `javac --release 8`；这表示字节码兼容目标，不表示
 必须使用旧版 JDK。Android `targetSdk` 保持 36，以维持现有权限和运行行为
-契约。手表包的版本与 Android manifest 保持 `0.4.4` / versionCode `13`。
+契约。手表包版本与 Android manifest 始终一致；云端依据 release-policy.json 和发布运行序号自动生成版本，规则见 [自动发布](releasing.md)。
 
 ## 云端构建与签名
 
-构建入口是 [.github/workflows/build.yml](../.github/workflows/build.yml)。
+自动发布入口是 [release.yml](../.github/workflows/release.yml)，构建入口是 [.github/workflows/build.yml](../.github/workflows/build.yml)。
 GitHub Actions 在 Windows runner 上恢复依赖，构建 APK 和 RPK，运行回归，
 验证 APK 的密码学签名，并检查两端版本与包配对。固定发布证书只通过 Actions
 Secrets 提供；需要的 Secret 名称是：
