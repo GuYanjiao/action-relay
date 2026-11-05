@@ -30,18 +30,21 @@ static uint8_t *state(JNIEnv *e,jobject b,size_t *size){
 static jbyteArray result(JNIEnv *e,uint8_t *bytes,intptr_t n){
     if(n<0){error(e,"java/lang/IllegalArgumentException","Rejected native core input/state");return NULL;}
     jbyteArray a=(*e)->NewByteArray(e,(jsize)n);
-    if(a&&n)(*e)->SetByteArrayRegion(e,a,0,(jsize)n,(jbyte*)bytes);return a;
+    if(a&&n)(*e)->SetByteArrayRegion(e,a,0,(jsize)n,(jbyte*)bytes);
+    return a;
 }
 #define FN(name) Java_cn_local_actionrelay_core_NativeCore_##name
 JNIEXPORT jintArray JNICALL FN(sizes)(JNIEnv *e,jclass c){
     jint v[2]={(jint)relay_stream_size(),(jint)relay_queue_size()};jintArray a=(*e)->NewIntArray(e,2);
-    if(a)(*e)->SetIntArrayRegion(e,a,0,2,v);return a;
+    if(a)(*e)->SetIntArrayRegion(e,a,0,2,v);
+    return a;
 }
 JNIEXPORT jlong JNICALL FN(crc)(JNIEnv *e,jclass c,jbyteArray a,jint off,jint len,jboolean wide){
     uint8_t b[8192];
     if(!a||off<0||len<0||len>8192||off>(*e)->GetArrayLength(e,a)-len){error(e,"java/lang/IllegalArgumentException","Invalid CRC range");return 0;}
     if(len)(*e)->GetByteArrayRegion(e,a,off,len,(jbyte*)b);
-    if((*e)->ExceptionCheck(e))return 0;return (jlong)relay_crc(b,(size_t)len,wide);
+    if((*e)->ExceptionCheck(e))return 0;
+    return (jlong)relay_crc(b,(size_t)len,wide);
 }
 JNIEXPORT jbyteArray JNICALL FN(frame)(JNIEnv *e,jclass c,jint set,jint id,jint kind,jint seq,jbyteArray a){
     uint8_t in[1023],out[1023];int n=read_bytes(e,a,in,1005,1);if(n<0)return NULL;
@@ -72,5 +75,6 @@ JNIEXPORT void JNICALL FN(clear)(JNIEnv *e,jclass c,jobject buffer,jboolean gps)
 }
 JNIEXPORT jint JNICALL FN(count)(JNIEnv *e,jclass c,jobject buffer){
     size_t size;uint8_t *s=state(e,buffer,&size);if(!s)return 0;int n=relay_count(s,size);
-    if(n<0)error(e,"java/lang/IllegalArgumentException","Invalid queue state");return n;
+    if(n<0)error(e,"java/lang/IllegalArgumentException","Invalid queue state");
+    return n;
 }

@@ -47,3 +47,4 @@ which is released under the Apache License Version 2.0.
 The source code of esp-idf is available at: https://github.com/espressif/esp-idf.
 
 ********************************************************************************************************
+Rust standard library (Rust 1.99.1): dual MIT / Apache-2.0 licensing. The ARM64 APK includes the upstream license texts in assets/native/Rust-LICENSE-MIT.txt and Rust-LICENSE-APACHE.txt. Rust protocol algorithms preserve the DJI references above; no third-party Rust crates are used.

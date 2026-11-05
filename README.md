@@ -55,7 +55,7 @@ Xiaomi Watch S4  ←→  Android 手机  ←→  DJI Osmo Action 4
 
 ## 兼容性与功能边界
 
-面向国行 **Xiaomi Watch S4（固件 3.201.79）**、**DJI Osmo Action 4** 开发；手机要求 **Android 12 及以上**，并连接小米运动健康。其他手表、相机和固件组合未作兼容保证。
+面向国行 **Xiaomi Watch S4（固件 3.201.79）**、**DJI Osmo Action 4** 开发；手机要求 **ARM64、Android 12 及以上**，并连接小米运动健康。其他手表、相机和固件组合未作兼容保证。
 
 - 分辨率、帧率目前只读，需在相机上修改。温度是过热等级，**不是摄氏度数值**。
 - 剩余可录时间来自相机，按小时、分钟显示；字段缺失、过期或未知时显示 `—`。
@@ -64,10 +64,11 @@ Xiaomi Watch S4  ←→  Android 手机  ←→  DJI Osmo Action 4
 
 ## 开发与协议
 
-手机端使用原生 Java，手表端使用 Xiaomi Vela JavaScript/UX。构建、回归测试和固定证书签名由 GitHub Actions 完成。
+手机端使用 Rust 协议/队列核心和 Java Android 接口层，手表端使用 Xiaomi Vela JavaScript/UX。当前 APK 只支持 ARM64（arm64-v8a），ARMv7 后续补充。构建、回归测试和固定证书签名由 GitHub Actions 完成。
 
 - [开发文档与消息契约](docs/development.md)
 - [相机状态与协议字段](docs/dji-watch-telemetry.md)
+- [Rust ARM64 架构与验证](docs/rust-arm64.md)
 - [后台性能与架构](docs/background-performance.md)
 - [自动版本与发布](docs/releasing.md)
 - [构建工作流](.github/workflows)

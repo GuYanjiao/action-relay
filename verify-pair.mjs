@@ -40,6 +40,7 @@ for(let i=0;i<phcount;i++){
   assert.ok(nativeBytes.readBigUInt64LE(offset+48)>=16384n,'ELF load segments must support Android 16KB pages');
 }
 assert.ok(loadSegments>0,'Native ELF must have loadable segments');
+for(const name of ['Rust-LICENSE-MIT.txt','Rust-LICENSE-APACHE.txt'])assert.ok(phoneZip.file('assets/native/'+name),'Rust license notice required');
 for(const archive of [watchZip,phoneZip])assert.ok(!Object.keys(archive.files).some(p=>/private\.pem|\.p12$|\.jks$/.test(p)));
 const report={result:'PASS',package:manifest.package,versionName,versionCode:manifest.versionCode,signingAlias:signing.alias,certificateSha256:certificate.fingerprint256,
   watchSha256:createHash('sha256').update(rpk).digest('hex'),phoneSha256:createHash('sha256').update(apk).digest('hex'),

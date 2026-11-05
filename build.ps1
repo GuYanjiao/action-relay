@@ -63,6 +63,11 @@ try{
   $native=Join-Path $projectRoot 'android/native-libs/arm64-v8a/libaction_relay_core.so'
   if(-not (Test-Path -LiteralPath $native)){throw 'Cloud-built ARM64 Rust library is required.'}
   [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$native,'lib/arm64-v8a/libaction_relay_core.so',[System.IO.Compression.CompressionLevel]::NoCompression)|Out-Null
+  foreach($license in @('Rust-LICENSE-MIT.txt','Rust-LICENSE-APACHE.txt')){
+    $source=Join-Path $projectRoot "android/native-libs/arm64-v8a/$license"
+    if(-not (Test-Path -LiteralPath $source)){throw 'Rust standard-library license notices required.'}
+    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$source,"assets/native/$license",[System.IO.Compression.CompressionLevel]::Optimal)|Out-Null
+  }
 }finally{$archive.Dispose()}
 Run-Checked "$BuildTools\zipalign.exe" @('-f','-P','16','4',"$build\unsigned.apk","$build\aligned.apk")
 $apk=Join-Path $build ("ActionRelay-$VersionName.apk")
