@@ -2,9 +2,11 @@
 
 ## 技术边界
 
-Action Relay 由两部分组成：
+Action Relay 由以下部分组成：
 
-- `android/`：原生 Android Java 手机端，负责 DJI BLE 会话、手机 GNSS、
+- `rust-core/`：Rust 1.99.1 协议编解码、CRC、通知重组和控制/GPS队列；JNI 桥只负责传递缓冲区。当前只交叉编译 ARM64，NDK 30.0.16248370。
+
+- `android/`：原生 Android Java 手机端，负责 Android DJI BLE 会话适配、手机 GNSS、
   手机 UI、手表互联和快捷设置磁贴。
 - `watch/`：Xiaomi Vela JavaScript/UX 手表端，负责圆屏控制界面、状态呈现
   和与手机的互联消息。
@@ -53,6 +55,8 @@ Node/JDK 版本分别由根目录 `.node-version`、`.java-version` 指定；实
 ## 测试入口与目录
 
 所有可执行构建和回归在云端运行：
+
+- [rust-core.yml](../.github/workflows/rust-core.yml) 运行 Rust 测试与 Clippy、Linux JNI/Java 原有回归，再构建 Android ARM64 库；打包必须依赖此门控成功。
 
 - [ci.yml](../.github/workflows/ci.yml) 运行手表 Node 测试和协议 Java 测试。
 - [scripts/test.ps1](../scripts/test.ps1) 是完整回归入口，按 `all`、

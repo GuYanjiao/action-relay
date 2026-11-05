@@ -13,7 +13,7 @@
 
 ## Java、Rust/C++ 与 ARM 分包
 
-当前 Android 业务代码为 Java/DEX，已检查的小米 SDK JAR 没有 `.so`，发布校验报告新增 `runtime` 和 `nativeAbis` 字段。现阶段采用一个通用 APK；拆成两个文件但携带相同 DEX 不会产生针对 ARMv7/ARMv8 的原生优化。
+0.4.6 及以前 Android 业务代码为 Java/DEX，已检查的小米 SDK JAR 没有 `.so`，发布校验报告新增 `runtime` 和 `nativeAbis` 字段。这些旧版本采用一个通用 APK；拆成两个文件但携带相同 DEX 不会产生针对 ARMv7/ARMv8 的原生优化。
 
 Android 的 [ART 会使用 JIT/AOT 编译](https://source.android.com/docs/core/runtime/jit-compiler)。这不证明所有 Java 路径足够快，也不证明换语言一定能减少后台耗电。Android 官方同时要求[减少 JNI 数据封送和跨语言调用](https://developer.android.com/ndk/guides/jni-tips)。
 
@@ -24,3 +24,7 @@ Android 的 [ART 会使用 JIT/AOT 编译](https://source.android.com/docs/core/
 使用同一手机、系统、亮度、无线环境和相机固件，分别对照升级前后的相同时长：中转开启但无相机、相机待机/GPS关闭、相机待机/GPS开启、反复开始/停止录像、锁屏后断线与重连。
 
 记录 Android 系统的应用耗电、CPU 时间/调度、GNSS 活跃时长、内存/GC，并核对 p50/p95 命令到相机确认的延迟。保留原始记录在仓库外，公开报告只放脱敏汇总。首次启动、充电和温度变化不应混入稳态结论。当前没有真机 A/B 能耗结果，因此没有承诺节电比例，也没有宣布语言重构已经通过性能验证。
+
+## Rust 接入更新（2026-11-05）
+
+用户随后明确要求使用 Rust 重构，并先只支持 ARM64。帧生成、CRC、通知重组与传输队列已经迁入 rust-core；Android SDK/定位测量及控制确认状态机保持原接口。新版 APK 带 arm64-v8a 原生库，不再是无原生库的通用包。实现与云端边界见 [Rust ARM64](rust-arm64.md)。没有因语言迁移而直接宣称节电或真机延迟改善。

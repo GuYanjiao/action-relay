@@ -10,7 +10,7 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
   <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
   <queries><package android:name="com.xiaomi.wearable"/><package android:name="com.mi.health"/></queries>
-  <application android:name=".RelayApp" android:label="Action 中转" android:icon="@drawable/ic_relay" android:theme="@style/AppTheme" android:allowBackup="false" android:supportsRtl="true">
+  <application android:extractNativeLibs="false" android:name=".RelayApp" android:label="Action 中转" android:icon="@drawable/ic_relay" android:theme="@style/AppTheme" android:allowBackup="false" android:supportsRtl="true">
     <activity android:name=".MainActivity" android:exported="true">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>

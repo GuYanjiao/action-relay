@@ -4,9 +4,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.nio.ByteBuffer;
+import cn.local.actionrelay.core.NativeCore;
 
 /**
- * DJI R SDK BLE framing, independently expressed in Java from DJI's published demo.
+ * DJI R SDK API adapter; Rust implements framing, CRC and stream reassembly.
  * Reference: dji-sdk/Osmo-GPS-Controller-Demo, commit
  * 92fe23e5a749f189593f980a26a105c3bb66aa1c (protocol/, utils/crc/, logic/).
  * See THIRD_PARTY_NOTICES.txt distributed with this source.
@@ -49,41 +51,16 @@ public final class DjiProtocol {
     }
 
     public static int crc16(byte[] bytes, int offset, int length) {
-        int crc = 0x3aa3;
-        for (int i = offset; i < offset + length; i++) {
-            crc ^= u8(bytes[i]);
-            for (int bit = 0; bit < 8; bit++)
-                crc = (crc & 1) != 0 ? (crc >>> 1) ^ 0xa001 : crc >>> 1;
-        }
-        return crc & 0xffff;
+        return (int)NativeCore.crc(bytes,offset,length,false);
     }
 
     public static long crc32(byte[] bytes, int offset, int length) {
-        long crc = 0x3aa3L;
-        for (int i = offset; i < offset + length; i++) {
-            crc ^= u8(bytes[i]);
-            for (int bit = 0; bit < 8; bit++)
-                crc = (crc & 1) != 0 ? (crc >>> 1) ^ 0xedb88320L : crc >>> 1;
-        }
-        return crc & 0xffffffffL;
+        return NativeCore.crc(bytes,offset,length,true);
     }
 
     public static byte[] frame(int commandSet, int commandId, int commandType,
                                int sequence, byte[] payload) {
-        if (payload == null) payload = new byte[0];
-        int length = MIN_FRAME_LENGTH + payload.length;
-        if (length > MAX_FRAME_LENGTH) throw new IllegalArgumentException("Frame too long");
-        byte[] result = new byte[length];
-        result[0] = (byte) 0xaa;
-        put16(result, 1, length);
-        result[3] = (byte) commandType;
-        put16(result, 8, sequence);
-        put16(result, 10, crc16(result, 0, 10));
-        result[12] = (byte) commandSet;
-        result[13] = (byte) commandId;
-        System.arraycopy(payload, 0, result, 14, payload.length);
-        put32(result, length - 4, crc32(result, 0, length - 4));
-        return result;
+        return NativeCore.frame(commandSet,commandId,commandType,sequence,payload);
     }
 
     public static byte[] connectionRequest(int sequence, long controllerId,
@@ -142,52 +119,28 @@ public final class DjiProtocol {
     }
 
     public static Frame decode(byte[] bytes) {
-        if (bytes == null || bytes.length < MIN_FRAME_LENGTH || bytes.length > MAX_FRAME_LENGTH)
-            throw new IllegalArgumentException("Invalid frame size");
-        int verLength = u16(bytes, 1);
-        if (u8(bytes[0]) != 0xaa || (verLength >>> 10) != 0
-                || (verLength & 1023) != bytes.length || u8(bytes[4]) != 0)
-            throw new IllegalArgumentException("Unsupported header");
-        if (u16(bytes, 10) != crc16(bytes, 0, 10))
-            throw new IllegalArgumentException("Header CRC mismatch");
-        if (u32(bytes, bytes.length - 4) != crc32(bytes, 0, bytes.length - 4))
-            throw new IllegalArgumentException("Frame CRC mismatch");
+        NativeCore.validate(bytes);
         return new Frame(bytes);
     }
 
-    /** Reassembles notification fragments/coalesced frames; ignores 0x55/non-R-SDK data. */
+    /** A fixed direct buffer belongs to this decoder and is collected by the JVM.
+     * One JNI call processes a whole BLE notification, never one call per byte. */
     public static final class StreamDecoder {
-        private byte[] pending = new byte[0];
+        private final ByteBuffer state=NativeCore.streamState();
         public long discardedBytes;
-        public List<Frame> feed(byte[] bytes) {
-            if (bytes == null || bytes.length == 0) return new ArrayList<Frame>();
-            // BLE callbacks are bounded, but do not retain unbounded injected input.
-            if (bytes.length > 8192) throw new IllegalArgumentException("Notification too large");
-            byte[] joined = new byte[pending.length + bytes.length];
-            System.arraycopy(pending, 0, joined, 0, pending.length);
-            System.arraycopy(bytes, 0, joined, pending.length, bytes.length);
-            List<Frame> frames = new ArrayList<Frame>();
-            int at = 0;
-            while (at < joined.length) {
-                if (u8(joined[at]) != 0xaa) { at++; discardedBytes++; continue; }
-                if (joined.length - at < 12) break;
-                int verLength = u16(joined, at + 1);
-                int length = verLength & 1023;
-                if ((verLength >>> 10) != 0 || length < MIN_FRAME_LENGTH
-                        || u8(joined[at + 4]) != 0
-                        || u16(joined, at + 10) != crc16(joined, at, 10)) {
-                    at++; discardedBytes++; continue;
-                }
-                if (joined.length - at < length) break;
-                try {
-                    frames.add(decode(Arrays.copyOfRange(joined, at, at + length)));
-                    at += length;
-                } catch (IllegalArgumentException invalid) { at++; discardedBytes++; }
+        public synchronized List<Frame> feed(byte[] bytes) {
+            List<Frame> frames=new ArrayList<Frame>();
+            if(bytes==null||bytes.length==0)return frames;
+            byte[] decoded=NativeCore.feed(state,bytes);
+            discardedBytes=NativeCore.read64(decoded,0);
+            int offset=8;
+            while(offset<decoded.length){
+                int length=u16(decoded,offset);offset+=2;
+                frames.add(new Frame(Arrays.copyOfRange(decoded,offset,offset+length)));offset+=length;
             }
-            pending = Arrays.copyOfRange(joined, at, joined.length);
             return frames;
         }
-        public void reset() { pending = new byte[0]; discardedBytes = 0; }
+        public synchronized void reset(){NativeCore.clear(state,false);discardedBytes=0;}
     }
 
     public static final class CameraStatus {

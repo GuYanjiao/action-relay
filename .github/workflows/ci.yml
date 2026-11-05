@@ -1,8 +1,6 @@
 name: Validate
 
 on:
-  push:
-    branches: [main, 'work/**']
   pull_request:
 
 permissions:
@@ -24,13 +22,4 @@ jobs:
       - run: npm ci
       - run: npm test
   protocol:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-java@v6.1.0
-        with:
-          distribution: temurin
-          java-version-file: '.java-version'
-      - name: Run protocol, lifecycle and transport regression
-        shell: pwsh
-        run: ./scripts/test.ps1 -Area protocol
+    uses: ./.github/workflows/rust-core.yml

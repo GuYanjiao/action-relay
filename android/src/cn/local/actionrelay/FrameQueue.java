@@ -1,39 +1,25 @@
 package cn.local.actionrelay;
 
-import java.util.ArrayDeque;
-import java.util.Iterator;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import cn.local.actionrelay.core.NativeCore;
 
-/** Control first; one replaceable GPS sample; no stale shutter command after stop. */
+/** Rust owns bounded queue policy; this adapter only exposes transport packets. */
 public final class FrameQueue {
     public static final class Packet {
         public final byte[] bytes;
         public final long deadline,queuedAt;
         public final boolean telemetry;
-        private Packet(byte[] bytes,long deadline,boolean telemetry){this.bytes=bytes.clone();this.deadline=deadline;this.telemetry=telemetry;this.queuedAt=deadline-(telemetry?1500:4000);}
-    }
-    private final ArrayDeque<Packet> controls=new ArrayDeque<>();
-    private Packet latestGps;
-    public void offerControl(byte[] bytes,long now){
-        if(isRecordingCommand(bytes,false)){
-            Iterator<Packet> it=controls.iterator();
-            while(it.hasNext()){Packet p=it.next();if(isRecordingCommand(p.bytes,true)||isRecordingCommand(p.bytes,false))it.remove();}
-            latestGps=null;
-            controls.addFirst(new Packet(bytes,now+4000,false));
-        }else{
-            if(controls.size()>=32)throw new IllegalStateException("相机指令队列繁忙");
-            controls.addLast(new Packet(bytes,now+4000,false));
+        private Packet(byte[] encoded){
+            telemetry=encoded[0]!=0;queuedAt=NativeCore.read64(encoded,1);
+            deadline=NativeCore.read64(encoded,9);bytes=Arrays.copyOfRange(encoded,17,encoded.length);
         }
     }
-    public void offerGps(byte[] bytes,long now){latestGps=new Packet(bytes,now+1500,true);}
-    public Packet poll(long now){
-        if(!controls.isEmpty())return controls.removeFirst();
-        Packet p=latestGps;latestGps=null;
-        return p!=null&&now<p.deadline?p:null;
-    }
-    public void clearGps(){latestGps=null;}
-    public void clear(){controls.clear();latestGps=null;}
-    public int controlCount(){return controls.size();}
-    private static boolean isRecordingCommand(byte[] bytes,boolean start){
-        return bytes!=null&&bytes.length>=19&&(bytes[12]&255)==0x1d&&(bytes[13]&255)==3&&(bytes[18]&255)==(start?0:1);
-    }
+    private final ByteBuffer state=NativeCore.queueState();
+    public synchronized void offerControl(byte[] bytes,long now){NativeCore.offer(state,bytes,now,false);}
+    public synchronized void offerGps(byte[] bytes,long now){NativeCore.offer(state,bytes,now,true);}
+    public synchronized Packet poll(long now){byte[] packet=NativeCore.poll(state,now);return packet.length==0?null:new Packet(packet);}
+    public synchronized void clearGps(){NativeCore.clear(state,true);}
+    public synchronized void clear(){NativeCore.clear(state,false);}
+    public synchronized int controlCount(){return NativeCore.count(state);}
 }
