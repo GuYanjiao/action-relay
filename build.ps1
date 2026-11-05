@@ -40,38 +40,16 @@ New-Item -ItemType Directory -Force -Path $build,"$build\classes","$build\genera
 Run-Checked "$JdkBin\javac.exe" @('-encoding','UTF-8','-d',$sign,(Join-Path $projectRoot 'ExportSigning.java'))
 $watchSign=Join-Path $projectRoot 'watch\sign\debug'
 Run-Checked "$JdkBin\java.exe" @('-cp',$sign,'ExportSigning',$SigningKeystore,$SigningAlias,$watchSign,$signing.certificateSha256)
-$androidJar=Join-Path $AndroidPlatform 'android.jar'
-$resources=Join-Path $build 'resources.zip'
-Run-Checked "$BuildTools\aapt2.exe" @('compile','--dir',(Join-Path $projectRoot 'android\res'),'-o',$resources)
-Run-Checked "$BuildTools\aapt2.exe" @('link','-I',$androidJar,'--manifest',(Join-Path $projectRoot 'android\AndroidManifest.xml'),'--java',"$build\generated",'-o',"$build\resources.apk",'--min-sdk-version','31','--target-sdk-version','36',$resources)
-$jars=@(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'android\libs') -Filter '*.jar' -File | ForEach-Object {$_.FullName})
-$javaSources=@(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'android\src'),"$build\generated" -Recurse -Filter '*.java' -File | ForEach-Object {$_.FullName})
-$sourceList=Join-Path $build 'sources.txt'
-$sourceText=($javaSources|ForEach-Object {'"'+$_.Replace('\','/')+'"'}) -join "`n"
-[System.IO.File]::WriteAllText($sourceList,$sourceText,[System.Text.UTF8Encoding]::new($false))
-$classPath=(@($androidJar)+$jars)-join ';'
-Run-Checked "$JdkBin\javac.exe" @('--release','8','-encoding','UTF-8','-cp',$classPath,'-d',"$build\classes",('@'+$sourceList))
-Run-Checked "$JdkBin\jar.exe" @('cf',"$build\classes.jar",'-C',"$build\classes",'.')
-$dexArgs=@('-cp',"$BuildTools\lib\d8.jar",'com.android.tools.r8.D8','--release','--min-api','31','--lib',$androidJar,'--output',"$build\dex","$build\classes.jar")+$jars
-Run-Checked "$JdkBin\java.exe" $dexArgs
-Copy-Item -LiteralPath "$build\resources.apk" -Destination "$build\unsigned.apk" -Force
-Add-Type -AssemblyName System.IO.Compression
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$archive=[System.IO.Compression.ZipFile]::Open("$build\unsigned.apk",[System.IO.Compression.ZipArchiveMode]::Update)
-try{
-  Get-ChildItem -LiteralPath "$build\dex" -Filter '*.dex' -File|ForEach-Object {[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$_.FullName,$_.Name,[System.IO.Compression.CompressionLevel]::Optimal)|Out-Null}
-  $native=Join-Path $projectRoot 'android/native-libs/arm64-v8a/libaction_relay_core.so'
-  if(-not (Test-Path -LiteralPath $native)){throw 'Cloud-built ARM64 Rust library is required.'}
-  [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$native,'lib/arm64-v8a/libaction_relay_core.so',[System.IO.Compression.CompressionLevel]::NoCompression)|Out-Null
-  foreach($license in @('Rust-LICENSE-MIT.txt','Rust-LICENSE-APACHE.txt')){
-    $source=Join-Path $projectRoot "android/native-libs/arm64-v8a/$license"
-    if(-not (Test-Path -LiteralPath $source)){throw 'Rust standard-library license notices required.'}
-    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$source,"assets/native/$license",[System.IO.Compression.CompressionLevel]::Optimal)|Out-Null
-  }
-}finally{$archive.Dispose()}
-Run-Checked "$BuildTools\zipalign.exe" @('-f','-P','16','4',"$build\unsigned.apk","$build\aligned.apk")
+$native=Join-Path $projectRoot 'android/native-libs/arm64-v8a/libaction_relay_core.so'
+if(-not (Test-Path -LiteralPath $native)){throw 'Cloud-built ARM64 Rust library is required.'}
+$notices=Join-Path $projectRoot 'android/native-assets/native'
+New-Item -ItemType Directory -Force -Path $notices | Out-Null
+foreach($license in @('Rust-LICENSE-MIT.txt','Rust-LICENSE-APACHE.txt')){
+  Copy-Item -LiteralPath (Join-Path $projectRoot "android/native-libs/arm64-v8a/$license") -Destination $notices -Force
+}
+Run-Checked (Join-Path $projectRoot 'gradlew.bat') @('--no-daemon',':android:assembleRelease')
 $apk=Join-Path $build ("ActionRelay-$VersionName.apk")
-Run-Checked "$JdkBin\java.exe" @('--enable-native-access=ALL-UNNAMED','-jar',"$BuildTools\lib\apksigner.jar",'sign','--ks',$SigningKeystore,'--ks-key-alias',$SigningAlias,'--ks-pass','env:ACTION_RELAY_STORE_PASSWORD','--key-pass','env:ACTION_RELAY_KEY_PASSWORD','--out',$apk,"$build\aligned.apk")
+Copy-Item -LiteralPath (Join-Path $build 'outputs/apk/release/android-release.apk') -Destination $apk -Force
 Run-Checked "$JdkBin\java.exe" @('--enable-native-access=ALL-UNNAMED','-jar',"$BuildTools\lib\apksigner.jar",'verify','--verbose','--print-certs',$apk)
 Run-Checked "$BuildTools\zipalign.exe" @('-c','-P','16','4',$apk)
 if(-not $SkipWatch){
@@ -79,6 +57,4 @@ if(-not $SkipWatch){
   Push-Location (Join-Path $projectRoot 'watch')
   try{Run-Checked 'node' @($AiotCli,'build')}finally{Pop-Location}
 }
-Get-ChildItem -LiteralPath $build -Force -Exclude ("ActionRelay-$VersionName.apk") |
-  Remove-Item -Recurse -Force
 Write-Output "Built $apk"

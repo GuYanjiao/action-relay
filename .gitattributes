@@ -11,3 +11,6 @@
 
 *.sh text eol=lf
 *.yml text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf
+gradlew text eol=lf

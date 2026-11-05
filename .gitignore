@@ -29,3 +29,6 @@ release-notes.md
 
 rust-core/target/
 android/native-libs/
+android/native-assets/
+.gradle/
+core-tests/.gradle/
