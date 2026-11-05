@@ -69,7 +69,7 @@ public final class XiaomiWatchBridge {
         state("中转已关闭");
     }
     private final Runnable poll=new Runnable(){public void run(){
-        if(!running)return;refresh();main.postDelayed(this,5000);
+        if(!running)return;refresh();main.postDelayed(this,registeredNode.isEmpty()?5000:30000);
     }};
     private final OnServiceConnectionListener serviceListener=new OnServiceConnectionListener(){
         public void onServiceConnected(){main.post(()->{if(running){state("小米运动健康服务已连接");refresh();}});}
@@ -185,6 +185,7 @@ public final class XiaomiWatchBridge {
         return running&&!registeredNode.isEmpty()&&lastMessageAt>0
             &&SystemClock.elapsedRealtime()-lastMessageAt<=15000;
     }
+    public boolean hasRegisteredChannel(){return running&&!registeredNode.isEmpty();}
     public void send(String json){
         if(!running||messages==null||nodeId.isEmpty()||registeredNode.isEmpty()||json==null||json.length()>4096)return;
         try{

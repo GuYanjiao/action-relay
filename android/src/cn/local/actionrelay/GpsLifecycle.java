@@ -6,8 +6,8 @@ public final class GpsLifecycle {
     private final Driver driver;
     private boolean active;
     public GpsLifecycle(Driver driver) { this.driver=driver; }
-    public void reconfigure(boolean relayEnabled,boolean requested) {
-        if(!relayEnabled||!requested) { stop(); return; }
+    public void reconfigure(boolean relayEnabled,boolean requested,boolean cameraReady) {
+        if(!relayEnabled||!requested||!cameraReady) { stop(); return; }
         if(!active) active=driver.start();
     }
     public void stop() { driver.stop(); active=false; }

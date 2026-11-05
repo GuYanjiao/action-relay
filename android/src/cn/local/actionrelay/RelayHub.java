@@ -90,7 +90,7 @@ public final class RelayHub {
             public void onPhase(String p,String m){phase=p;message=m;publish();changed();}
             public void onTransportReady(){
                 phase="authorizing"; message=String.format(Locale.ROOT,"请在相机上允许连接 · 验证码 %04d",verificationCode);
-                session.startHandshake(!prefs.getBoolean("paired_"+selectedAddress,false),verificationCode); publish();changed();
+                session.startHandshake(!prefs.getBoolean("paired_"+selectedAddress,false),verificationCode); wakePulse();publish();changed();
             }
             public void onBytes(byte[] bytes){session.onBytes(bytes);}
             public void onDisconnected(String reason){
@@ -116,7 +116,7 @@ public final class RelayHub {
                     prefs.edit().putBoolean("paired_"+selectedAddress,true).putString("camera_address",selectedAddress)
                         .putString("camera_name",rememberedCameraName).putLong("camera_last_success",rememberedCameraLastSuccess).apply();
                 }
-                changed();
+                reconfigureGps();changed();
             }
             public void onStatus(DjiProtocol.CameraStatus status){
                 if(!busy) message=status.mode==5?"相机处于拍照模式":status.cameraState==2?"点击拍摄可尝试退出回放":!status.isNormalVideoMode()?"请将相机设为普通视频或拍照模式":!status.isControllableState()?"相机暂不可控，状态码 "+status.cameraState:status.isRecording()?"相机正在录像":status.isPreRecording()?"相机处于预录缓存":"相机已待机";
@@ -162,11 +162,18 @@ public final class RelayHub {
     }
     private final Runnable pulse=new Runnable(){public void run(){
         if(!enabled)return; session.tick(SystemClock.elapsedRealtime());
-        if(SystemClock.elapsedRealtime()-lastPublish>=1900) publish(); changed(); main.postDelayed(this,500);
+        if(SystemClock.elapsedRealtime()-lastPublish>=1900) publish();
+        // BLE callbacks deliver control and telemetry immediately. Only the
+        // timeout/recovery path needs a fast watchdog; disconnected standby
+        // has no active session deadline. Never use a wake lock for this timer.
+        long delay="handshaking".equals(session.getPhase())||!"idle".equals(session.getCommandPhase())?500:
+            session.isReady()||bridge.hasRegisteredChannel()?2000:10000;
+        main.postDelayed(this,delay);
     }};
+    private void wakePulse(){if(enabled){main.removeCallbacks(pulse);main.post(pulse);}}
     public void start(){
         if(enabled)return; enabled=true;rotateEpoch();message="手机中转已开启，请搜索相机";
-        bridge.start(); gpsLifecycle.reconfigure(true,gpsEnabled); main.post(pulse);
+        bridge.start(); reconfigureGps();main.post(pulse);
         if(!receiverRegistered){
             IntentFilter filter=new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
             if(Build.VERSION.SDK_INT>=33)context.registerReceiver(bluetoothReceiver,filter,Context.RECEIVER_EXPORTED);
@@ -208,8 +215,10 @@ public final class RelayHub {
         if(!value){cancelReconnect();reconnectRequested=false;}else{reconnectPolicy.reset();onEnvironmentChanged();}changed();
     }
     public void reconfigureGps(){
-        gpsLifecycle.reconfigure(enabled,gpsEnabled);
+        boolean cameraReady=session.isReady()&&ble.supportsGps();
+        gpsLifecycle.reconfigure(enabled,gpsEnabled,cameraReady);
         if(!gpsEnabled){gpsState="off";gpsMessage="GPS推送未开启";gpsAccuracy=-1;gpsSpeed=-1;ble.clearGps();}
+        else if(enabled&&!cameraReady){gpsState="waiting_camera";gpsMessage="相机连接后自动启动定位";gpsAccuracy=-1;gpsSpeed=-1;ble.clearGps();}
         changed();
     }
     public void setGpsEnabled(boolean enabled){gpsEnabled=enabled;prefs.edit().putBoolean("gps_enabled",enabled).apply();if(!enabled){gpsLifecycle.stop();gpsState="off";gpsMessage="GPS推送未开启";gpsAccuracy=-1;gpsSpeed=-1;ble.clearGps();}changed();}
@@ -300,7 +309,7 @@ public final class RelayHub {
     private void photoCommand(String id){
         if(!enabled || !session.canTakePhoto()){reject(id,"相机拍照未就绪");return;}
         busy=true;activeRequest=id;commandStarts.put(id,SystemClock.elapsedRealtime());message="正在请求拍照";
-        ble.setControlPriority(true);session.takePhoto(id);
+        ble.setControlPriority(true);session.takePhoto(id);wakePulse();
         if(id.equals(activeRequest)) {
             JSONObject accepted=json("v",1,"type","result","id",id,"ok",false,"phase","accepted","message",message,"session",epoch,"revision",session.getRevision());
             rememberResult(id,accepted);sendWatch(accepted);
@@ -312,7 +321,7 @@ public final class RelayHub {
         busy=true;activeRequest=id;commandStarts.put(id,SystemClock.elapsedRealtime());message=desired?"正在请求开始录像":"正在请求停止录像";
         ble.setControlPriority(true);
         // Dispatch camera control before generating receipts or waking UI observers.
-        session.setRecording(desired,id);
+        session.setRecording(desired,id);wakePulse();
         if(!id.equals(activeRequest)){changed();return;}
         JSONObject accepted=json("v",1,"type","result","id",id,"ok",false,"phase","accepted","message",message,"session",epoch,"revision",session.getRevision());
         rememberResult(id,accepted);sendWatch(accepted);changed();
@@ -352,7 +361,7 @@ public final class RelayHub {
     public void removeListener(UiListener listener){observers.remove(listener);}
     private boolean uiQueued;
     private void changed(){
-        if(uiQueued)return;uiQueued=true;
+        if(uiQueued||observers.isEmpty())return;uiQueued=true;
         main.post(()->{uiQueued=false;for(UiListener observer:new ArrayList<>(observers))observer.onChanged();});
     }
     private static JSONObject json(Object... values){JSONObject result=new JSONObject();try{for(int i=0;i<values.length;i+=2)result.put((String)values[i],values[i+1]);}catch(Exception ignored){}return result;}

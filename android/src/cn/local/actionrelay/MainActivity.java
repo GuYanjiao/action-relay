@@ -174,7 +174,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         addAction(content,"log","连接记录",this::showLogsPanel);
         addAction(content,"refresh","重新配对相机",()->new AlertDialog.Builder(this).setTitle("重新配对相机？").setMessage("清除本应用保存的配对授权并断开连接。之后需重新搜索相机。").setPositiveButton("重新配对",(d,w)->hub.forgetCamera()).setNegativeButton("取消",null).show());
         addAction(content,"info","使用提示",()->new AlertDialog.Builder(this).setTitle("使用提示").setMessage("相机请设为普通视频模式。首次连接需在相机确认验证码。\n\n锁屏使用前，允许本应用和小米运动健康后台运行，并按系统提供的选项设置为不限制省电。\n\n自动重连不会自动录像。状态未确认时，主键会暂停使用。").setPositiveButton("知道了",null).show());
-        gap(content,8);addText(content,"Action 中转 · 0.4.4",12,MUTED,false);showSheet();render();
+        gap(content,8);addText(content,"Action 中转 · "+appVersion(),12,MUTED,false);showSheet();render();
     }
     private void showLogsPanel(){LinearLayout content=sheet("连接记录");logsView=addText(content,"",12,MUTED,false);logsView.setTypeface(Typeface.MONOSPACE);logsView.setTextIsSelectable(true);showSheet();render();}
     private void openAppSettings(){startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}
@@ -204,6 +204,10 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
     }
     private void showSheet(){panel.show();Window w=panel.getWindow();if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);WindowManager.LayoutParams p=w.getAttributes();p.dimAmount=.55f;p.gravity=Gravity.BOTTOM;p.width=-1;p.height=-2;w.setAttributes(p);w.setNavigationBarColor(CARD);}}
 
+    private String appVersion(){
+        try{return getPackageManager().getPackageInfo(getPackageName(),0).versionName;}
+        catch(PackageManager.NameNotFoundException error){return "";}
+    }
     private void render(){
         JSONObject s=hub.snapshot();
         boolean ready="ready".equals(hub.phase);boolean watchConnected=s.optBoolean("watchConnected",false);
@@ -215,7 +219,7 @@ public final class MainActivity extends Activity implements RelayHub.UiListener 
         watchStatus.update(watchConnected?"已连接":"未连接",watchConnected?GREEN:MUTED);cameraStatus.update(ready?"已连接":"未连接",ready?GREEN:MUTED);
         int battery=s.optInt("battery",-1);batteryStatus.update(battery>=0?battery+"%":"—",battery<0?MUTED:battery<=20?RED:battery<=50?AMBER:GREEN);
         String gps=s.optString("gpsState",hub.gpsState);boolean gpsOn=hub.gpsEnabled;int gpsColor=!gpsOn?MUTED:"ready".equals(gps)?GREEN:"permission".equals(gps)||"denied".equals(gps)||"unavailable".equals(gps)?RED:AMBER;
-        String gpsTitle=!gpsOn?"关闭":!hub.enabled?"暂停":"ready".equals(gps)?"已定位":"permission".equals(gps)||"denied".equals(gps)?"未授权":"provider_off".equals(gps)?"请打开定位":"stale".equals(gps)?"定位已过期":"unavailable".equals(gps)?"启动失败":"off".equals(gps)?"未启动":"定位中";
+        String gpsTitle=!gpsOn?"关闭":!hub.enabled?"暂停":"waiting_camera".equals(gps)?"等待相机":"ready".equals(gps)?"已定位":"permission".equals(gps)||"denied".equals(gps)?"未授权":"provider_off".equals(gps)?"请打开定位":"stale".equals(gps)?"定位已过期":"unavailable".equals(gps)?"启动失败":"off".equals(gps)?"未启动":"定位中";
         gpsStatus.update(gpsTitle,gpsColor);
         recordingStatus.setText("录像状态："+("stopping".equals(phase)?"停止中":"starting".equals(phase)?"开始中":rec?"录像中":canStart?"待机":!hub.enabled?"先开启中转":!ready?"等待相机连接":"等待状态"));
         recordingStatus.setTextColor(rec?RED:MUTED);
