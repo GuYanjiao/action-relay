@@ -61,5 +61,5 @@ fs.writeFileSync(path.join(output, 'build-info.json'), JSON.stringify(metadata, 
 const assets = fs.readdirSync(output, {recursive: true}).filter(f => fs.statSync(path.join(output, f)).isFile());
 fs.writeFileSync(path.join(output, 'SHA256SUMS.txt'), assets.sort().map(f => `${hash(fs.readFileSync(path.join(output, f)))}  ${f.replaceAll('\\', '/')}\n`).join(''));
 fs.writeFileSync('release-notes.md', track === 'phone'
-  ? `手机中转版 ${version}\n\n下载同一版本的 APK 和 RPK。通过完整回归、固定证书签名和包配对校验。\n\n源码：${sha}\n构建：${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}\n\n功能与安装说明见 README；硬件兼容边界仍以设备实测为准。\n`
+  ? `手机中转版 ${version}\n\n下载同一版本的 APK 和 RPK。ARM64（arm64-v8a）Rust 核心版，暂不支持32位 ARMv7。通过 Rust 单元/对照、完整协议回归、固定证书签名、16KB 页对齐和包配对校验。\n\n源码：${sha}\n构建：${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}\n\n功能与安装说明见 README；硬件兼容边界仍以设备实测为准。\n`
   : `nRF52840 实验固件 ${version}\n\n这是开发板中转路线的诊断预发布版。保留心率 ANT+ 基线，包含 S4 FE95/认证诊断；Action 4 控制和应用消息中转尚未完成，不能替代手机中转版。没有附带用户 AuthKey。\n\n源码：${sha}\n构建：${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}\n\n刷写前请阅读 FIRMWARE-README 与分区检查报告，并备份现有程序。\n`);

@@ -25,10 +25,25 @@ assert.equal(manifest.versionName,versionName);
 assert.equal(manifest.versionCode,sourceManifest.versionCode);
 const phoneZip=await JSZip.loadAsync(apk,{checkCRC32:true});
 assert.ok(phoneZip.file('classes.dex'));assert.ok(phoneZip.file('AndroidManifest.xml'));
+const nativeNames=Object.keys(phoneZip.files).filter(p=>/^lib\/[^/]+\/[^/]+\.so$/.test(p));
+assert.deepEqual(nativeNames,['lib/arm64-v8a/libaction_relay_core.so'],'This release supports only the requested ARM64 ABI');
+const nativeBytes=await phoneZip.file(nativeNames[0]).async('nodebuffer');
+assert.equal(nativeBytes.subarray(0,4).toString('hex'),'7f454c46');
+assert.equal(nativeBytes[4],2,'Native core must be ELF64');
+assert.equal(nativeBytes.readUInt16LE(18),183,'Native core must target AArch64');
+const phoff=Number(nativeBytes.readBigUInt64LE(32)),phsize=nativeBytes.readUInt16LE(54),phcount=nativeBytes.readUInt16LE(56);
+let loadSegments=0;
+for(let i=0;i<phcount;i++){
+  const offset=phoff+i*phsize;
+  if(nativeBytes.readUInt32LE(offset)!==1)continue;
+  loadSegments++;
+  assert.ok(nativeBytes.readBigUInt64LE(offset+48)>=16384n,'ELF load segments must support Android 16KB pages');
+}
+assert.ok(loadSegments>0,'Native ELF must have loadable segments');
 for(const archive of [watchZip,phoneZip])assert.ok(!Object.keys(archive.files).some(p=>/private\.pem|\.p12$|\.jks$/.test(p)));
 const report={result:'PASS',package:manifest.package,versionName,versionCode:manifest.versionCode,signingAlias:signing.alias,certificateSha256:certificate.fingerprint256,
   watchSha256:createHash('sha256').update(rpk).digest('hex'),phoneSha256:createHash('sha256').update(apk).digest('hex'),
-  runtime:'ART',nativeAbis:[...new Set(Object.keys(phoneZip.files).map(p=>/^lib\/([^/]+)\/[^/]+\.so$/.exec(p)).filter(Boolean).map(m=>m[1]))],
+  runtime:'Rust core + ART Android adapters',nativeAbis:['arm64-v8a'],nativeCoreSha256:createHash('sha256').update(nativeBytes).digest('hex'),rustVersion:'1.99.1',ndkVersion:'30.0.16248370',
   checks:['fixed certificate fingerprint','both package CRCs','same certificate embedded','watch feature declaration','phone DEX and manifest','no signing keys in packages']};
 fs.mkdirSync(path.join(root,'artifacts'),{recursive:true});
 fs.writeFileSync(path.join(root,'artifacts/signing-report.json'),JSON.stringify(report,null,2)+'\n');

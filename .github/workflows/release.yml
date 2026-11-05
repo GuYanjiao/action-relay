@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'android/**'
+      - 'rust-core/**'
+      - 'rust-toolchain.toml'
+      - 'scripts/build-rust.sh'
+      - '.github/workflows/rust-core.yml'
       - 'watch/**'
       - 'tests/**'
       - 'signing/**'
