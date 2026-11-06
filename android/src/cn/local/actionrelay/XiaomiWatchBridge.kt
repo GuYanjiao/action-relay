@@ -98,9 +98,10 @@ class XiaomiWatchBridge(context: Context, private val listener: Listener) {
     }
     private fun requestPermission(run: Int, id: String){
         if(authorizing || !ensureApis())return;authorizing=true
-        try{auth.requestPermission(id,Permission.DEVICE_MANAGER).addOnSuccessListener{granted -> main.post{
+        try{auth.requestPermission(id,Permission.DEVICE_MANAGER).addOnSuccessListener{main.post{
             if(!running || run!=generation || id!=nodeId){authorizing=false;return@post};authorizing=false
-            if(granted==true){state("通信授权已就绪");attach(run,id)}else state("需要点击“手表通信授权”")
+            // requestPermission returns Permission[], not Boolean. Verify the actual grant.
+            state("授权流程已返回，正在核对权限");checkAndListen(run,id)
         }}.addOnFailureListener{error -> main.post{
             if(!running || run!=generation || id!=nodeId){authorizing=false;return@post}
             authorizing=false;state("通信授权尚未就绪");report("申请通信授权失败",error)
@@ -118,8 +119,8 @@ class XiaomiWatchBridge(context: Context, private val listener: Listener) {
         main.postDelayed({if(run==generation && id==nodeId)registering=false},12000)
     }
     private val messageListener=object: OnMessageReceivedListener {
-        override fun onMessageReceived(id: String, bytes: ByteArray?){
-            if(bytes==null || bytes.size>4096)return
+        override fun onMessageReceived(id: String, bytes: ByteArray){
+            if(bytes.size>4096)return
             val copy=bytes.clone();main.post{
                 if(!running || id!=nodeId)return@post
                 lastMessageAt=SystemClock.elapsedRealtime()
