@@ -28,3 +28,7 @@ Android 的 [ART 会使用 JIT/AOT 编译](https://source.android.com/docs/core/
 ## Rust 接入更新（2026-11-05）
 
 用户随后明确要求使用 Rust 重构，并先只支持 ARM64。帧生成、CRC、通知重组与传输队列已经迁入 rust-core；Android SDK/定位测量及控制确认状态机保持原接口。新版 APK 带 arm64-v8a 原生库，不再是无原生库的通用包。实现与云端边界见 [Rust ARM64](rust-arm64.md)。没有因语言迁移而直接宣称节电或真机延迟改善。
+
+## Kotlin 接口层更新（2026-11-06）
+
+Android 应用代码迁移为 Kotlin，界面使用 Compose / miuix。界面仅在可见期间注册状态监听，后台调度、GNSS消费者门控、有界队列和 Rust 批量 JNI 保持不变；不增加常驻协程轮询。Kotlin 同样运行在 ART，迁移本身不代表 CPU 或电量改善，仍需按上述场景进行真机对照。

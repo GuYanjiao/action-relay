@@ -31,7 +31,7 @@
 - 通过前台中转服务连接手表与相机，优先处理录制控制，合并状态与 GPS 更新。
 - 使用手机真实 GNSS 测量向相机发送 GPS 数据，显示权限、定位质量、数据过期等状态。
 - 提供 **Action 中转** 快捷设置磁贴，一键开启中转服务。
-- 界面跟随手机系统切换亮色、暗色模式。
+- Kotlin / Compose / miuix 界面，跟随手机系统切换亮色、暗色模式。
 - 后台按连接与控制状态调整检查频率；相机断开时暂停 GPS 采集，连接后恢复记忆开关。
 
 ## 工作方式
@@ -64,7 +64,7 @@ Xiaomi Watch S4  ←→  Android 手机  ←→  DJI Osmo Action 4
 
 ## 开发与协议
 
-手机端使用 Rust 协议/队列核心和 Java Android 接口层，手表端使用 Xiaomi Vela JavaScript/UX。当前 APK 只支持 ARM64（arm64-v8a），ARMv7 后续补充。构建、回归测试和固定证书签名由 GitHub Actions 完成。
+手机端使用 Rust 协议/队列核心和 Kotlin Android 接口层（Compose / miuix），手表端使用 Xiaomi Vela JavaScript/UX。当前 APK 只支持 ARM64（arm64-v8a），ARMv7 后续补充。构建、回归测试和固定证书签名由 GitHub Actions 完成。
 
 - [开发文档与消息契约](docs/development.md)
 - [相机状态与协议字段](docs/dji-watch-telemetry.md)

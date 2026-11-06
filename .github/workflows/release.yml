@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - 'android/**'
+      - 'core-tests/**'
+      - 'gradle/**'
+      - 'gradlew*'
+      - '*.gradle.kts'
+      - 'gradle.properties'
       - 'rust-core/**'
       - 'rust-toolchain.toml'
       - 'scripts/build-rust.sh'
