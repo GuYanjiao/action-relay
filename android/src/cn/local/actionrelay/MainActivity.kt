@@ -151,7 +151,7 @@ class MainActivity: ComponentActivity(),RelayHub.UiListener {
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
                             Indicator("watch",if(watch)"已连接"else "未连接",if(watch)success else muted){hub.bridge.openAuthorization(this@MainActivity)}
                             Indicator("camera",if(ready)"已连接"else "未连接",if(ready)success else muted){page="camera"}
-                            Indicator("battery",if(battery>=0)"$battery%"else "—",if(battery in 0..20)colors.error else muted)
+                            Indicator("battery",if(battery>=0)"$battery%"else "—",when{battery<0->muted;battery<=20->colors.error;battery<=50->Color(0xffc28a20);else->success})
                             Indicator("gps",gpsTitle(),if(hub.gpsState=="ready")success else if(hub.gpsEnabled)colors.primary else muted){page="gps"}
                         }
                     }

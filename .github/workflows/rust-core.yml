@@ -13,6 +13,7 @@ jobs:
         with:
           distribution: temurin
           java-version-file: '.java-version'
+          cache: gradle
       - name: Install pinned stable Rust
         run: |
           rustup toolchain install 1.99.1 --profile minimal --component clippy

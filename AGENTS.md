@@ -6,7 +6,7 @@ This repository is the writable project. A separate ChatGPT project `sources/` m
 
 - Target: mainland Xiaomi Watch S4 3.201.79, Xiaomi 17 / Android 17, DJI Action 4.
 - User tested v0.2 basic recording through the phone relay. Stop-confirmation latency/stale UI remains a reported bug.
-- Watch UI is the priority: large graphical capture control, short status, Osmo remote-inspired layout. Phone UI uses miuix-inspired native styling; do not claim the Compose Miuix library is integrated.
+- Watch UI is the priority: large graphical capture control, short status, Osmo remote-inspired layout. Phone UI uses Kotlin, Compose and the miuix-ui library; preserve system light/dark mode and the start-relay tile.
 - GPS now explicitly belongs in scope, from the phone's real GNSS. Preserve measurement accuracy and freshness; never invent missing fields.
 - Keep transport acceptance, camera state, and user-visible command confirmation separate. Unknown/transitional states are not proof that recording stopped.
 - Never toggle the camera shutter blindly or automatically replay a start command. Stop must be able to supersede an unconfirmed start.

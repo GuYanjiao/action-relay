@@ -33,8 +33,9 @@ object GpsProtocol {
         if (fix.verticalAccuracyMeters * 1000.0 > 0xffffffffL || fix.speedAccuracyMps * 100.0 > 0xffffffffL) return "精度字段超出协议范围"
         return null
     }
-    @JvmStatic fun encode(sequence: Int, fix: Fix, nowElapsedMs: Long): ByteArray {
-        invalidReason(fix, nowElapsedMs)?.let { throw IllegalArgumentException(it) }
+    @JvmStatic fun encode(sequence: Int, input: Fix?, nowElapsedMs: Long): ByteArray {
+        invalidReason(input, nowElapsedMs)?.let { throw IllegalArgumentException(it) }
+        val fix = requireNotNull(input)
         val local = Calendar.getInstance(TimeZone.getTimeZone("GMT+08:00"), Locale.ROOT).apply { timeInMillis = fix.utcMillis }
         val date = local.get(Calendar.YEAR)*10000 + (local.get(Calendar.MONTH)+1)*100 + local.get(Calendar.DAY_OF_MONTH)
         val time = local.get(Calendar.HOUR_OF_DAY)*10000 + local.get(Calendar.MINUTE)*100 + local.get(Calendar.SECOND)

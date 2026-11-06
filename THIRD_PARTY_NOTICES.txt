@@ -48,3 +48,5 @@ The source code of esp-idf is available at: https://github.com/espressif/esp-idf
 
 ********************************************************************************************************
 Rust standard library (Rust 1.99.1): dual MIT / Apache-2.0 licensing. The ARM64 APK includes the upstream license texts in assets/native/Rust-LICENSE-MIT.txt and Rust-LICENSE-APACHE.txt. Rust protocol algorithms preserve the DJI references above; no third-party Rust crates are used.
+
+Android UI and runtime dependencies: Kotlin, AndroidX / Jetpack Compose, JetBrains Compose Multiplatform, and miuix-ui 0.9.4 (compose-miuix-ui contributors) are used under Apache License 2.0. Upstream projects: https://github.com/JetBrains/kotlin , https://android.googlesource.com/platform/frameworks/support , https://github.com/JetBrains/compose-multiplatform , https://github.com/compose-miuix-ui/miuix . Gradle Wrapper: Apache-2.0 (https://github.com/gradle/gradle).

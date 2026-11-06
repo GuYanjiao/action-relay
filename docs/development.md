@@ -6,14 +6,14 @@ Action Relay 由以下部分组成：
 
 - `rust-core/`：Rust 1.99.1 协议编解码、CRC、通知重组和控制/GPS队列；JNI 桥只负责传递缓冲区。当前只交叉编译 ARM64，NDK 30.0.16248370。
 
-- `android/`：原生 Android Java 手机端，负责 Android DJI BLE 会话适配、手机 GNSS、
-  手机 UI、手表互联和快捷设置磁贴。
+- `android/`：Kotlin Android 手机端，负责 Android DJI BLE 会话适配、手机 GNSS、
+  Compose / miuix UI、手表互联和快捷设置磁贴。
 - `watch/`：Xiaomi Vela JavaScript/UX 手表端，负责圆屏控制界面、状态呈现
   和与手机的互联消息。
 
-Android 字节码目标使用 `javac --release 8`；这表示字节码兼容目标，不表示
-必须使用旧版 JDK。Android `targetSdk` 保持 36，以维持现有权限和运行行为
-契约。手表包版本与 Android manifest 始终一致；云端依据 release-policy.json 和发布运行序号自动生成版本，规则见 [自动发布](releasing.md)。
+Android 使用 AGP 内置 Kotlin、Compose 编译器插件和 Gradle Wrapper，JVM 字节码目标为17。
+构建 JDK 仍由 `.java-version` 固定。`targetSdk` 保持36，最小Android12，权限与前台服务契约保持一致。
+手表包版本与 Android manifest 始终一致；云端依据 release-policy.json 和发布运行序号自动生成版本，规则见 [自动发布](releasing.md)。
 
 ## 云端构建与签名
 
@@ -34,12 +34,18 @@ Secrets 提供；需要的 Secret 名称是：
 
 ### 工具链口径
 
-以下为 2026-10-26 核实的稳定工具链配置：
+以下为 2026-11-06 配置的稳定工具链配置：
 
 | 工具 | 配置版本 |
 |---|---|
 | Node.js | 26.12.1 |
 | Temurin JDK | 27 |
+| Kotlin / Compose 编译器 | 2.4.21 |
+| Gradle Wrapper | 9.6.0（下载校验 SHA-256） |
+| Android Gradle Plugin | 9.5.0 |
+| Compose Multiplatform Foundation | 1.12.0 |
+| miuix-ui | 0.9.4 |
+| AndroidX Activity Compose | 1.13.0 |
 | Android Platform | 37.2 |
 | Android Build Tools | 37.0.0 |
 | `aiot-toolkit` | 2.0.5 |
@@ -56,9 +62,9 @@ Node/JDK 版本分别由根目录 `.node-version`、`.java-version` 指定；实
 
 所有可执行构建和回归在云端运行：
 
-- [rust-core.yml](../.github/workflows/rust-core.yml) 运行 Rust 测试与 Clippy、Linux JNI/Java 原有回归，再构建 Android ARM64 库；打包必须依赖此门控成功。
+- [rust-core.yml](../.github/workflows/rust-core.yml) 运行 Rust 测试与 Clippy、Linux JNI + Kotlin 实现的原有 Java 回归，再构建 Android ARM64 库；打包必须依赖此门控成功。
 
-- [ci.yml](../.github/workflows/ci.yml) 运行手表 Node 测试和协议 Java 测试。
+- [ci.yml](../.github/workflows/ci.yml) 运行手表 Node 测试和Kotlin 协议实现及 Java 互操作测试。
 - [scripts/test.ps1](../scripts/test.ps1) 是完整回归入口，按 `all`、
   `protocol` 或 `watch` 选择范围。
 - `tests/protocol/`、`tests/lifecycle/` 和 `tests/transport/`
@@ -68,7 +74,7 @@ Node/JDK 版本分别由根目录 `.node-version`、`.java-version` 指定；实
   同次构建的 APK/RPK。
 
 本地允许编辑、阅读、搜索和静态检查；按照项目约定，不调用 Android、Vela
-或 Java 编译器，不运行本地回归，也不执行本地打包。云端测试通过不替代
+、Kotlin、Java 或 Rust 编译器，不运行本地回归，也不执行本地打包。云端测试通过不替代
 Watch S4、Android 手机和 Action 4 的硬件验证。
 
 ## 消息契约与状态真实性
@@ -92,7 +98,7 @@ GPS 只发送手机真实测量值，并保留新鲜度、质量和完整性判�
 应分别记录相机停止与保存、手机-手表通信、手机 GNSS 质量及视频 GPS 数据。
 
 手机端 UI 不承载重复的录像主控，避免误触和不必要的自定义绘制；录像状态以紧凑文本呈现，
-控制入口保留在手表和快捷磁贴。蓝牙扫描候选设备使用有界集合，避免扫描回调异常时持续
+录像控制入口保留在手表；手机快捷磁贴只负责开启中转。蓝牙扫描候选设备使用有界集合，避免扫描回调异常时持续
 占用内存；控制、结果、日志和 GPS 队列同样必须保持有界或合并旧值。
 
 手机和手表状态栏的顺序固定为手机、相机、GPS、电量；电量颜色统一为低电量红色、
@@ -111,13 +117,13 @@ GPS 只发送手机真实测量值，并保留新鲜度、质量和完整性判�
 [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt)。不要在文档或日志中
 加入私钥、口令、个人设备标识、个人位置轨迹或原始个人日志。
 
-构建使用 Android 官方 AAPT2、D8、zipalign 和 apksigner；更新工具链不需要引入另一个并行的 Gradle 工程。根目录和 watch/ 各有锁文件，分别通过 `npm ci --ignore-scripts` 和 `npm ci` 恢复校验工具及官方手表工具链，避免在构建中临时解析未锁定的 JSZip。`aiot-toolkit` 保持官方 latest 稳定版 2.0.5，不使用预发布标签。
+Android 统一由 Gradle / AGP 负责 Kotlin、Compose、资源、R8 和固定证书签名；`build.ps1` 只编排云端产物和手表构建。
+`core-tests` 是独立 JVM 测试工程，编译生产 Kotlin 核心及原有 Java 测试，校验互操作和迁移后的行为。
+保留 `ExportSigning.java` 作为云端导出同证书手表签名的构建辅助程序，它不属于 Android 应用源码。
 
-打包脚本会在云端构建开始前清理旧的 Android/手表生成目录，构建成功后仅保留最终
-APK/RPK，删除 dex、classes、资源中间包和手表签名工作目录；手表编译目录会保留到
-云端回归与配对校验结束，因为编译后页面测试需要读取页面输出，配对校验需要读取公开证书。
-手表私钥由工作流的最终清理步骤删除。因此旧版本包不会混入
-工作区或上传物。正式 APK/RPK 体积应与项目源码、依赖安装目录和本地缓存分开统计。
+根目录和 watch/ 各有锁文件，分别通过 `npm ci --ignore-scripts` 和 `npm ci` 恢复校验及手表工具链。
+云端构建前清理旧产物，最终只上传指定版本 APK/RPK 与验证报告；Gradle 中间输出不作为发行附件。
+手表私钥由最终清理步骤删除。Rust 仍只交叉编译 ARM64，协议和定位质量约束不变。
 
 维护记录：[项目状态](maintainers/status.md)、[云端验收](validation/)、[停止确认机制](testing/stop-confirmation.md)。早期检查清单属于历史任务记录，当前目录与执行方式以本文及 AGENTS.md 为准。
 

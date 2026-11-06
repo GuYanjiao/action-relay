@@ -44,7 +44,7 @@ for(const name of ['Rust-LICENSE-MIT.txt','Rust-LICENSE-APACHE.txt'])assert.ok(p
 for(const archive of [watchZip,phoneZip])assert.ok(!Object.keys(archive.files).some(p=>/private\.pem|\.p12$|\.jks$/.test(p)));
 const report={result:'PASS',package:manifest.package,versionName,versionCode:manifest.versionCode,signingAlias:signing.alias,certificateSha256:certificate.fingerprint256,
   watchSha256:createHash('sha256').update(rpk).digest('hex'),phoneSha256:createHash('sha256').update(apk).digest('hex'),
-  runtime:'Rust core + ART Android adapters',nativeAbis:['arm64-v8a'],nativeCoreSha256:createHash('sha256').update(nativeBytes).digest('hex'),rustVersion:'1.99.1',ndkVersion:'30.0.16248370',
+  runtime:'Rust core + Kotlin Android / Compose miuix',nativeAbis:['arm64-v8a'],nativeCoreSha256:createHash('sha256').update(nativeBytes).digest('hex'),rustVersion:'1.99.1',ndkVersion:'30.0.16248370',
   checks:['fixed certificate fingerprint','both package CRCs','same certificate embedded','watch feature declaration','phone DEX and manifest','no signing keys in packages']};
 fs.mkdirSync(path.join(root,'artifacts'),{recursive:true});
 fs.writeFileSync(path.join(root,'artifacts/signing-report.json'),JSON.stringify(report,null,2)+'\n');

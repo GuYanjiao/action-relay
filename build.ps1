@@ -36,7 +36,7 @@ if(-not (Test-Path -LiteralPath (Join-Path $BuildTools 'aapt2.exe'))){throw 'Pas
 function Run-Checked([string]$program,[string[]]$arguments){& $program @arguments;if($LASTEXITCODE -ne 0){throw "$program failed ($LASTEXITCODE)"}}
 $build=Join-Path $projectRoot 'android\build'
 $sign=Join-Path $projectRoot '.signing'
-New-Item -ItemType Directory -Force -Path $build,"$build\classes","$build\generated","$build\dex",$sign | Out-Null
+New-Item -ItemType Directory -Force -Path $build,$sign | Out-Null
 Run-Checked "$JdkBin\javac.exe" @('-encoding','UTF-8','-d',$sign,(Join-Path $projectRoot 'ExportSigning.java'))
 $watchSign=Join-Path $projectRoot 'watch\sign\debug'
 Run-Checked "$JdkBin\java.exe" @('-cp',$sign,'ExportSigning',$SigningKeystore,$SigningAlias,$watchSign,$signing.certificateSha256)
