@@ -25,6 +25,11 @@ assert.equal(manifest.versionName,versionName);
 assert.equal(manifest.versionCode,sourceManifest.versionCode);
 const phoneZip=await JSZip.loadAsync(apk,{checkCRC32:true});
 assert.ok(phoneZip.file('classes.dex'));assert.ok(phoneZip.file('AndroidManifest.xml'));
+const dexFiles=await Promise.all(Object.keys(phoneZip.files).filter(p=>/^classes\d*\.dex$/.test(p)).map(p=>phoneZip.file(p).async('nodebuffer')));
+for(const component of ['RelayApp','MainActivity','RelayService','RecordingTileService','core/NativeCore']){
+  const descriptor=Buffer.from(`Lcn/local/actionrelay/${component};`);
+  assert.ok(dexFiles.some(bytes=>bytes.includes(descriptor)),`Missing Android/JNI entry point: ${component}`);
+}
 const nativeNames=Object.keys(phoneZip.files).filter(p=>/^lib\/[^/]+\/[^/]+\.so$/.test(p));
 assert.deepEqual(nativeNames,['lib/arm64-v8a/libaction_relay_core.so'],'This release supports only the requested ARM64 ABI');
 const nativeBytes=await phoneZip.file(nativeNames[0]).async('nodebuffer');

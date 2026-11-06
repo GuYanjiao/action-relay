@@ -17,7 +17,8 @@ android {
     }
     sourceSets["main"].apply {
         manifest.srcFile("AndroidManifest.xml")
-        java.setSrcDirs(listOf("src")); res.setSrcDirs(listOf("res"))
+        kotlin.directories += "src"
+        res.setSrcDirs(listOf("res"))
         jniLibs.setSrcDirs(listOf("native-libs"))
         assets.setSrcDirs(listOf("native-assets"))
     }

@@ -128,7 +128,8 @@ class MainActivity: ComponentActivity(),RelayHub.UiListener {
         var page by rememberSaveable{mutableStateOf("home")}
         BackHandler(page!="home"){page="home"}
         val colors=MiuixTheme.colorScheme
-        Column(Modifier.fillMaxSize().background(colors.background).safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal=24.dp,vertical=20.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){
+        val scroll=key(page){rememberScrollState()}
+        Column(Modifier.fillMaxSize().background(colors.background).safeDrawingPadding().verticalScroll(scroll).padding(horizontal=24.dp,vertical=20.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
                 if(page!="home")Button(onClick={page="home"},modifier=Modifier.size(56.dp)){Glyph("back",colors.onSurface)}
                 Column(Modifier.weight(1f)){
