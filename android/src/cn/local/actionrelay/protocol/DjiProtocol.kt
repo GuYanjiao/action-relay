@@ -62,7 +62,7 @@ object DjiProtocol {
         private val state = NativeCore.streamState()
         @JvmField var discardedBytes = 0L
         @Synchronized fun feed(bytes: ByteArray?): List<Frame> {
-            if (bytes.isNullOrEmpty()) return emptyList()
+            if (bytes == null || bytes.isEmpty()) return emptyList()
             val decoded = NativeCore.feed(state, bytes)
             discardedBytes = NativeCore.read64(decoded, 0)
             val frames = ArrayList<Frame>(); var offset = 8
