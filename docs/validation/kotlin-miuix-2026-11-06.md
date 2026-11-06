@@ -29,6 +29,6 @@ SDK适配确认 `requestPermission` 返回权限列表，回调后改用 `checkP
 
 ## 当前边界
 
-AGP9 源目录与 SDK 配置已按官方迁移文档修正（https://developer.android.com/build/migrate-to-built-in-kotlin），并新增 APK 内应用/JNI入口检查。完整 APK/RPK 构建与发布结果在完成后补记。本地只编辑、静态解析和检查产物；未在本地编译或运行回归。
+AGP9 源目录与 SDK 配置已按官方迁移文档修正（https://developer.android.com/build/migrate-to-built-in-kotlin），并新增 APK 内应用/JNI入口检查。源码a487056的 [最终预览构建42161754772](https://github.com/GuYanjiao/action-relay/actions/runs/42161754772) 已全部成功：Kotlin/Compose与R8、APK/RPK构建、固定证书签名、手表回归、全部原生库ARM64/16KB校验及5个Android/JNI入口校验。正式版本随后由main自动发布，结果在完成后补记。本地只编辑、静态解析和检查产物；未在本地编译或运行回归。
 
 尚未完成手机上的新界面、JNI、锁屏控制与 GPS 真机回归，未测量与旧版对照的 CPU 或电量。因此不宣称 Kotlin 迁移本身降低功耗或相机确认延迟。

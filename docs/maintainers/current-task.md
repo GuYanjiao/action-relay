@@ -18,5 +18,5 @@
 用户已同意将 Android 接口、界面和控制层改为 Kotlin，Rust ARM64 核心保留。工作分支 work/kotlin-android。
 16个应用源文件已迁移，原有 Java 回归直接校验 Kotlin 实现并全部通过；UI 使用 Compose / miuix-ui。
 已修复 AGP9 的 Kotlin 源目录及 manifest SDK 配置，新增 APK 应用/JNI入口校验。
-当前整包云端运行42160207365（源码 bcd1082）仍待完成；通过后合并 main，沿用自动递增版本、固定签名和 Release。
+最终预览云端42161754772（源码a487056）已全部成功；接下来合并main，由现有流程递增版本并签名发布。
 详见 docs/validation/kotlin-miuix-2026-11-06.md。本地没有编译，未修改开发板仓库或原心率项目。
