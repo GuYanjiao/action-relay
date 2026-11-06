@@ -22,9 +22,10 @@ class RelayHub(ctx: Context) {
     val context: Context=ctx.applicationContext
     val logs=ArrayList<String>()
     val candidates=LinkedHashMap<String,Candidate>()
-    lateinit var ble: DjiBle; private set
-    lateinit var session: DjiSession; private set
-    lateinit var bridge: XiaomiWatchBridge; private set
+    // Keep initialization guards for callbacks into this interdependent object graph.
+    @Suppress("UNNECESSARY_LATEINIT") lateinit var ble: DjiBle; private set
+    @Suppress("UNNECESSARY_LATEINIT") lateinit var session: DjiSession; private set
+    @Suppress("UNNECESSARY_LATEINIT") lateinit var bridge: XiaomiWatchBridge; private set
     private val observers=ArrayList<UiListener>()
     private val tickets=LinkedHashMap<String,Long>()
     private val results=LinkedHashMap<String,JSONObject>()
@@ -237,12 +238,12 @@ class RelayHub(ctx: Context) {
     }
     fun snapshot(): JSONObject {
         val s=session.getStatus();val fresh=session.isReady() && s!=null && session.getStatusAgeMs()<=DjiSession.STATUS_FRESH_MS
-        val recording: Any=if(fresh && s!!.isControllableState())s.isRecording()else JSONObject.NULL
+        val recording: Any=if(fresh && s.isControllableState())s.isRecording()else JSONObject.NULL
         val detail=if(session.isReady() && !fresh)"等待相机最新状态，按钮暂不可用"else message
         return json("v",1,"type","status","seq",++statusSeq,"session",epoch,"ticket",ticket,"camera",if(enabled)phase else "disconnected","recording",recording,
             "canControl",enabled && session.canControlRecording(),"canStart",enabled && session.canStartRecording(),"canPhoto",enabled && session.canTakePhoto(),"canStop",enabled && session.canStopRecording(),"busy",session.isBusy(),"pendingDesired",session.getPendingDesired() ?: JSONObject.NULL,
-            "recordPhase",session.getCommandPhase(),"watchConnected",bridge.isWatchConnected(),"gpsState",gpsState,"gpsEnabled",gpsEnabled,"battery",if(fresh)s!!.batteryPercent else -1,"recordSeconds",if(fresh)s!!.recordingSeconds else -1,"gpsMessage",gpsMessage,"message",detail,
-            "storageMb",if(fresh)s!!.remainingCapacityMb else -1,"cameraMode",if(fresh)s!!.mode else -1,"remainingSeconds",if(fresh)s!!.remainingRecordSeconds else -1,"temperatureState",if(fresh)s!!.temperatureState else -1,"cameraState",if(fresh)s!!.cameraState else -1,"videoResolution",if(fresh)s!!.videoResolution else -1,"fpsIndex",if(fresh)s!!.fpsIndex else -1,"revision",session.getRevision())
+            "recordPhase",session.getCommandPhase(),"watchConnected",bridge.isWatchConnected(),"gpsState",gpsState,"gpsEnabled",gpsEnabled,"battery",if(fresh)s.batteryPercent else -1,"recordSeconds",if(fresh)s.recordingSeconds else -1,"gpsMessage",gpsMessage,"message",detail,
+            "storageMb",if(fresh)s.remainingCapacityMb else -1,"cameraMode",if(fresh)s.mode else -1,"remainingSeconds",if(fresh)s.remainingRecordSeconds else -1,"temperatureState",if(fresh)s.temperatureState else -1,"cameraState",if(fresh)s.cameraState else -1,"videoResolution",if(fresh)s.videoResolution else -1,"fpsIndex",if(fresh)s.fpsIndex else -1,"revision",session.getRevision())
     }
     private fun controlKey()="$phase:${session.getCommandPhase()}:${session.canStartRecording()}:${session.canStopRecording()}:${session.canTakePhoto()}:${session.getStatus()?.cameraState ?: -1}"
     private fun publish(){if(!::session.isInitialized || !::bridge.isInitialized)return;newTicket();lastPublish=SystemClock.elapsedRealtime();lastPublishedControl=controlKey();sendWatch(snapshot())}

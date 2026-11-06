@@ -44,6 +44,7 @@ class RecordingTileService: TileService(),RelayHub.UiListener {
         try{startForegroundService(Intent(this,RelayService::class.java).setAction(RelayService.START))}
         catch(error: RuntimeException){hub.log("快捷中转启动需返回应用："+error.javaClass.simpleName);openForStartup()};update()
     }
+    @Suppress("DEPRECATION") // Required Intent overload on Android 12/13 only.
     private fun openForStartup(){
         val intent=Intent(this,MainActivity::class.java).setAction(MainActivity.START_RELAY_FROM_TILE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         if(Build.VERSION.SDK_INT>=34)startActivityAndCollapse(PendingIntent.getActivity(this,7,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))else startActivityAndCollapse(intent)

@@ -18,9 +18,9 @@ android {
     sourceSets["main"].apply {
         manifest.srcFile("AndroidManifest.xml")
         kotlin.directories += "src"
-        res.setSrcDirs(listOf("res"))
-        jniLibs.setSrcDirs(listOf("native-libs"))
-        assets.setSrcDirs(listOf("native-assets"))
+        res.directories += "res"
+        jniLibs.directories += "native-libs"
+        assets.directories += "native-assets"
     }
     signingConfigs {
         create("fixedRelease") {

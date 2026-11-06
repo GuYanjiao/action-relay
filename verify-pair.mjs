@@ -31,26 +31,33 @@ for(const component of ['RelayApp','MainActivity','RelayService','RecordingTileS
   assert.ok(dexFiles.some(bytes=>bytes.includes(descriptor)),`Missing Android/JNI entry point: ${component}`);
 }
 const nativeNames=Object.keys(phoneZip.files).filter(p=>/^lib\/[^/]+\/[^/]+\.so$/.test(p));
-assert.deepEqual(nativeNames,['lib/arm64-v8a/libaction_relay_core.so'],'This release supports only the requested ARM64 ABI');
-const nativeBytes=await phoneZip.file(nativeNames[0]).async('nodebuffer');
-assert.equal(nativeBytes.subarray(0,4).toString('hex'),'7f454c46');
-assert.equal(nativeBytes[4],2,'Native core must be ELF64');
-assert.equal(nativeBytes.readUInt16LE(18),183,'Native core must target AArch64');
-const phoff=Number(nativeBytes.readBigUInt64LE(32)),phsize=nativeBytes.readUInt16LE(54),phcount=nativeBytes.readUInt16LE(56);
-let loadSegments=0;
-for(let i=0;i<phcount;i++){
-  const offset=phoff+i*phsize;
-  if(nativeBytes.readUInt32LE(offset)!==1)continue;
-  loadSegments++;
-  assert.ok(nativeBytes.readBigUInt64LE(offset+48)>=16384n,'ELF load segments must support Android 16KB pages');
+assert.ok(nativeNames.includes('lib/arm64-v8a/libaction_relay_core.so'),'Rust core required');
+assert.ok(nativeNames.every(p=>/^lib\/arm64-v8a\/[^/]+\.so$/.test(p)),'This release supports only the requested ARM64 ABI');
+// Compose includes AndroidX graphics-path. Validate every shipped library, not just Rust.
+const nativeLibraries=[];
+for(const name of nativeNames){
+  const bytes=await phoneZip.file(name).async('nodebuffer');
+  assert.equal(bytes.subarray(0,4).toString('hex'),'7f454c46',name);
+  assert.equal(bytes[4],2,`${name} must be ELF64`);
+  assert.equal(bytes.readUInt16LE(18),183,`${name} must target AArch64`);
+  const phoff=Number(bytes.readBigUInt64LE(32)),phsize=bytes.readUInt16LE(54),phcount=bytes.readUInt16LE(56);
+  let loadSegments=0;
+  for(let i=0;i<phcount;i++){
+    const offset=phoff+i*phsize;
+    if(bytes.readUInt32LE(offset)!==1)continue;
+    loadSegments++;
+    assert.ok(bytes.readBigUInt64LE(offset+48)>=16384n,`${name} load segments must support Android 16KB pages`);
+  }
+  assert.ok(loadSegments>0,`${name} must have loadable segments`);
+  nativeLibraries.push({path:name,sha256:createHash('sha256').update(bytes).digest('hex')});
 }
-assert.ok(loadSegments>0,'Native ELF must have loadable segments');
+const nativeBytes=await phoneZip.file('lib/arm64-v8a/libaction_relay_core.so').async('nodebuffer');
 for(const name of ['Rust-LICENSE-MIT.txt','Rust-LICENSE-APACHE.txt'])assert.ok(phoneZip.file('assets/native/'+name),'Rust license notice required');
 for(const archive of [watchZip,phoneZip])assert.ok(!Object.keys(archive.files).some(p=>/private\.pem|\.p12$|\.jks$/.test(p)));
 const report={result:'PASS',package:manifest.package,versionName,versionCode:manifest.versionCode,signingAlias:signing.alias,certificateSha256:certificate.fingerprint256,
   watchSha256:createHash('sha256').update(rpk).digest('hex'),phoneSha256:createHash('sha256').update(apk).digest('hex'),
-  runtime:'Rust core + Kotlin Android / Compose miuix',nativeAbis:['arm64-v8a'],nativeCoreSha256:createHash('sha256').update(nativeBytes).digest('hex'),rustVersion:'1.99.1',ndkVersion:'30.0.16248370',
-  checks:['fixed certificate fingerprint','both package CRCs','same certificate embedded','watch feature declaration','phone DEX and manifest','no signing keys in packages']};
+  runtime:'Rust core + Kotlin Android / Compose miuix',nativeAbis:['arm64-v8a'],nativeLibraries,nativeCoreSha256:createHash('sha256').update(nativeBytes).digest('hex'),rustVersion:'1.99.1',ndkVersion:'30.0.16248370',
+  checks:['fixed certificate fingerprint','both package CRCs','same certificate embedded','watch feature declaration','phone DEX and manifest','Android and JNI entry points','all native libraries ARM64 and 16KB ELF alignment','no signing keys in packages']};
 fs.mkdirSync(path.join(root,'artifacts'),{recursive:true});
 fs.writeFileSync(path.join(root,'artifacts/signing-report.json'),JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report,null,2));

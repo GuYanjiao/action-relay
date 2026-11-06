@@ -21,6 +21,12 @@
 
 迁移期间由既有测试发现并修正 Kotlin 原始数组空判断、GPS空输入异常类型和新版 JVM 默认方法编译选项问题。未放宽原有断言。
 
+## 整包构建阶段
+
+源码3b45f90的 [构建42160821268](https://github.com/GuYanjiao/action-relay/actions/runs/42160821268) 已通过 Kotlin/Compose 编译、R8、APK/RPK构建、固定签名及手表回归。最后包配对校验仍按旧版单一Rust库断言，因此拒绝了新增的AndroidX图形库；已扩展为逐库校验ARM64/ELF/16KB对齐，并记录各库摘要，待完整重跑。
+
+SDK适配确认 `requestPermission` 返回权限列表，回调后改用 `checkPermission` 核实实际授权；消息回调按SDK的非空字节数组契约实现。
+
 ## 当前边界
 
 AGP9 源目录与 SDK 配置已按官方迁移文档修正（https://developer.android.com/build/migrate-to-built-in-kotlin），并新增 APK 内应用/JNI入口检查。完整 APK/RPK 构建与发布结果在完成后补记。本地只编辑、静态解析和检查产物；未在本地编译或运行回归。

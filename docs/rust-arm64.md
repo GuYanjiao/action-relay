@@ -28,4 +28,6 @@
 
 随后交叉构建 Android ARM64 库，再交给 APK/RPK 工作流。打包校验要求唯一原生 ABI 为 arm64-v8a、ELF64/AArch64、16KB页对齐、固定签名及同版 RPK，并记录原生库 SHA-256。Rust 标准库许可文本随 APK 分发。
 
+Kotlin / Compose 接入后，AndroidX 图形依赖也含原生库。验收覆盖包内每个原生库的 ABI、ELF 和16KB对齐，报告记录各库摘要；不只验证 Rust 库。APK 还必须包含应用、界面、服务、磁贴和 JNI 的固定入口类。
+
 上述结果证明构建、协议对照和模拟控制行为，不能替代手机上的 JNI 加载、蓝牙控制和功耗实测。尚未获得 Android 真机 Rust/旧版 Java 的 A/B CPU、延迟或电量数据，不宣称语言迁移本身带来固定比例的性能提升。ARMv7 后续另行交叉编译与验收。

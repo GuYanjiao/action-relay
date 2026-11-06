@@ -12,6 +12,8 @@ import cn.local.actionrelay.protocol.DjiProtocol
 
 /** One camera and one outstanding GATT operation. All mutations run on main. */
 @SuppressLint("MissingPermission")
+// Android 12 compatibility paths still require the legacy GATT overloads.
+@Suppress("DEPRECATION")
 class DjiBle(context: Context, private val listener: Listener) {
     interface Listener {
         fun onCandidate(address: String, name: String, rssi: Int)
