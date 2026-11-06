@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins { kotlin("jvm") version "2.4.21" }
 kotlin {
-    compilerOptions { jvmTarget.set(JvmTarget.JVM_17); freeCompilerArgs.add("-jvm-default=all") }
+    compilerOptions { jvmTarget.set(JvmTarget.JVM_17); freeCompilerArgs.add("-jvm-default=no-compatibility") }
     sourceSets["main"].kotlin.apply {
         srcDir("../android/src")
         include("cn/local/actionrelay/protocol/**", "cn/local/actionrelay/core/**", "cn/local/actionrelay/FrameQueue.kt", "cn/local/actionrelay/GpsLifecycle.kt", "cn/local/actionrelay/ReconnectPolicy.kt", "cn/local/actionrelay/WatchOutbox.kt")
