@@ -27,8 +27,23 @@
 
 SDK适配确认 `requestPermission` 返回权限列表，回调后改用 `checkPermission` 核实实际授权；消息回调按SDK的非空字节数组契约实现。
 
+## 正式发布
+
+签名合并提交 `6fc60bb6d866590781f46292572ffdc019b463a1` 的 [正式构建42162515798](https://github.com/GuYanjiao/action-relay/actions/runs/42162515798) 全部成功，自动发布 [v0.4.8](https://github.com/GuYanjiao/action-relay/releases/tag/v0.4.8)，版本码17。
+
+已从公开Release下载APK、RPK及验证报告，文件SHA-256同时匹配GitHub资产摘要与云端报告；读取两包ZIP与RPK manifest确认完整及同版。APK为2,726,496字节，RPK为171,869字节，固定安装证书不变。
+
+```text
+APK: 664ac5c5a8ffbb263c812f52fbf16c05f3c46d25495a3b706e3f4fd53c1de412
+RPK: 0fa34b663651334618689078a3ced1f4fad764f4b58e63e2a189af623fc932a1
+```
+
+APK仅有ARM64的Rust核心与AndroidX graphics-path两库。逐库摘要与报告一致；全部ELF加载段满足16KB对齐，ZIP均为不压缩，数据偏移分别2,179,072与2,490,368，均为16KB整数倍。5个应用/JNI入口均在DEX中。
+
+已fetch并用 `git verify-tag v0.4.8` 验证个人GPG签名，标签指向上述合并提交。开发工具链、Gradle和发布编排已在正式云端完整运行；没有新增用户设备上的运行证据。
+
 ## 当前边界
 
-AGP9 源目录与 SDK 配置已按官方迁移文档修正（https://developer.android.com/build/migrate-to-built-in-kotlin），并新增 APK 内应用/JNI入口检查。源码a487056的 [最终预览构建42161754772](https://github.com/GuYanjiao/action-relay/actions/runs/42161754772) 已全部成功：Kotlin/Compose与R8、APK/RPK构建、固定证书签名、手表回归、全部原生库ARM64/16KB校验及5个Android/JNI入口校验。正式版本随后由main自动发布，结果在完成后补记。本地只编辑、静态解析和检查产物；未在本地编译或运行回归。
+本地仅编辑、静态解析、读取公开产物与验证Git签名；未在本地编译或运行回归。
 
-尚未完成手机上的新界面、JNI、锁屏控制与 GPS 真机回归，未测量与旧版对照的 CPU 或电量。因此不宣称 Kotlin 迁移本身降低功耗或相机确认延迟。
+尚未完成手机上的新界面、JNI、锁屏控制与GPS真机回归，未测量与旧版对照的CPU或电量。因此不宣称Kotlin迁移本身降低功耗或相机确认延迟。
