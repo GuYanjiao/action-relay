@@ -86,6 +86,7 @@ export function createRelayController(options) {
       gpsState: status ? status.gpsState : 'off',
       gpsEnabled: status ? status.gpsEnabled === true : false,
       photoEnabled: fresh && hasTokens(status) && camera === 'ready' && status.canPhoto === true && !pending,
+      modeEnabled: fresh && hasTokens(status) && camera === 'ready' && status.canMode === true && !status.busy && !pending,
       cameraState: status ? status.cameraState : -1,
       startEnabled: canStart,
       stopEnabled: canStop
@@ -326,28 +327,30 @@ export function createRelayController(options) {
 
   function command(action) {
     if (destroyed || !visible) return false;
-    if (action !== 'start' && action !== 'stop' && action !== 'photo') return false;
+    if (action !== 'start' && action !== 'stop' && action !== 'photo' && action !== 'videoMode' && action !== 'photoMode') return false;
     var desired = action === 'start';
     var photo = action === 'photo';
+    var mode = action === 'videoMode' || action === 'photoMode';
     var age = lastReceived === null ? Infinity : now() - lastReceived;
     var canStart = lastStatus && lastStatus.canStart === true;
     var canPhoto = lastStatus && lastStatus.canPhoto === true;
+    var canMode = lastStatus && lastStatus.canMode === true && !lastStatus.busy;
     var canStop = lastStatus && lastStatus.canStop === true && (!pending || pending.action === 'start');
     if (!transportOpen || !lastStatus || !hasTokens(lastStatus) || age < 0 || age >= 6000 || lastStatus.camera !== 'ready' ||
-        (photo ? (!canPhoto || pending) : (desired ? (!canStart || pending) : !canStop))) {
+        (mode ? (!canMode || pending) : (photo ? (!canPhoto || pending) : (desired ? (!canStart || pending) : !canStop)))) {
       message = pending ? '等待上一条指令的相机确认' : '尚未就绪，请先连接手机和相机';
       emit();
       return false;
     }
-    if (!photo && ((desired && !canStart) || (!desired && !canStop))) {
+    if (!photo && !mode && ((desired && !canStart) || (!desired && !canStop))) {
       message = desired ? '相机已经在录像' : '相机已经停止录像';
       emit();
       return false;
     }
     sequence += 1;
     var id = prefix + '-' + sequence.toString(36);
-    pending = { id: id, action: action, timeoutMs: photo ? 35000 : (desired && lastStatus.cameraState === 2 ? 18000 : 0), sentAt: now(), session: lastStatus.session, revision: lastStatus.revision };
-    message = photo ? '正在请求拍照' : desired ? '正在请求开始录像' : '正在请求停止录像';
+    pending = { id: id, action: action, timeoutMs: mode ? 12000 : photo ? 35000 : (desired && lastStatus.cameraState === 2 ? 18000 : 0), sentAt: now(), session: lastStatus.session, revision: lastStatus.revision };
+    message = mode ? '正在切换拍摄模式' : photo ? '正在请求拍照' : desired ? '正在请求开始录像' : '正在请求停止录像';
     emit();
     return send({ v: 1, type: 'command', id: id, action: action, session: lastStatus.session, ticket: lastStatus.ticket }, function (error, code) {
       if (!pending || pending.id !== id) return;

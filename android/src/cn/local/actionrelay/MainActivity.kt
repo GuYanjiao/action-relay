@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
+import cn.local.actionrelay.updates.ReleaseUpdate
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -57,6 +58,8 @@ class MainActivity: ComponentActivity(),RelayHub.UiListener {
     private var resumed=false
     private var pendingGpsReconfigure=false
     private var update by mutableIntStateOf(0)
+    private lateinit var updateChecker: ReleaseUpdateChecker
+    private var releaseState by mutableStateOf(ReleaseUpdateChecker.State())
     private val nearbyPermission=registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()){
         if(hasPermission(Manifest.permission.BLUETOOTH_SCAN) && hasPermission(Manifest.permission.BLUETOOTH_CONNECT))startRelay()
         else toast("需要附近设备权限，可在系统设置中修改")
@@ -70,6 +73,7 @@ class MainActivity: ComponentActivity(),RelayHub.UiListener {
     }
     override fun onCreate(savedInstanceState: Bundle?){
         super.onCreate(savedInstanceState);hub=(application as RelayApp).hub;consumeStartupIntent(intent);enableEdgeToEdge()
+        updateChecker=ReleaseUpdateChecker(BuildConfig.VERSION_NAME){releaseState=it}
         setContent {MiuixTheme(controller=remember{ThemeController(ColorSchemeMode.System)}){RelayUi()}}
     }
     override fun onResume(){
@@ -78,6 +82,7 @@ class MainActivity: ComponentActivity(),RelayHub.UiListener {
         if(pendingTileStart){pendingTileStart=false;if(!hub.enabled)requestStart()}
     }
     override fun onPause(){resumed=false;hub.removeListener(this);super.onPause()}
+    override fun onDestroy(){if(::updateChecker.isInitialized)updateChecker.close();super.onDestroy()}
     override fun onNewIntent(intent: Intent){super.onNewIntent(intent);setIntent(intent);consumeStartupIntent(intent);if(resumed && pendingTileStart){pendingTileStart=false;if(!hub.enabled)requestStart()}}
     private fun consumeStartupIntent(intent: Intent?){if(intent?.action==START_RELAY_FROM_TILE){pendingTileStart=true;intent.action=Intent.ACTION_MAIN}}
     override fun onChanged(){update++}
@@ -121,6 +126,10 @@ class MainActivity: ComponentActivity(),RelayHub.UiListener {
         .setMessage("在系统设置中允许本应用和小米运动健康后台运行，将省电策略设为无限制，并允许自启动。可在多任务界面锁定小米运动健康。\n\n首次同意通信授权后，本应用会自动检测手表连接。")
         .setPositiveButton("打开小米运动健康设置"){_,_->openCompanionSettings()}.setNegativeButton("知道了",null).show()}
     private fun toast(text: String){Toast.makeText(this,text,Toast.LENGTH_LONG).show()}
+    private fun openReleaseLink(url: String){
+        try{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))}
+        catch(_: android.content.ActivityNotFoundException){toast("未找到浏览器，请到 GitHub 的 Action Relay 发布页下载")}
+    }
 
     @Composable private fun RelayUi(){
         // The single observer notification captures one consistent view; no UI timer survives pause.
@@ -133,7 +142,7 @@ class MainActivity: ComponentActivity(),RelayHub.UiListener {
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
                 if(page!="home")Button(onClick={page="home"},modifier=Modifier.size(56.dp)){Glyph("back",colors.onSurface)}
                 Column(Modifier.weight(1f)){
-                    Text(when(page){"camera"->"相机";"gps"->"手机 GPS";"tools"->"工具";"logs"->"连接记录";else->"Action"},fontSize=34.sp,fontWeight=FontWeight.Bold)
+                    Text(when(page){"camera"->"相机";"gps"->"手机 GPS";"tools"->"工具";"logs"->"连接记录";"updates"->"检查更新";else->"Action"},fontSize=34.sp,fontWeight=FontWeight.Bold)
                     Text(if(page=="home")"相机遥控"else "Action 中转",fontSize=14.sp,color=colors.onBackgroundVariant)
                 }
                 if(page=="home")Button(onClick={if(hub.enabled)closeRelay()else requestStart()},modifier=Modifier.size(68.dp).semantics{contentDescription=if(hub.enabled)"关闭手机中转"else "开启手机中转"}){Glyph("power",if(hub.enabled)colors.primary else colors.onSurface)}
@@ -168,6 +177,14 @@ class MainActivity: ComponentActivity(),RelayHub.UiListener {
                 }
                 "camera" -> {
                     Text(snapshot.optString("message"),color=colors.onBackgroundVariant)
+                    Card(Modifier.fillMaxWidth(),insideMargin=PaddingValues(18.dp)){
+                        Text("拍摄模式",fontWeight=FontWeight.SemiBold)
+                        Spacer(Modifier.height(10.dp))
+                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                            Button(onClick={hub.phoneMode(1)},enabled=snapshot.optBoolean("canMode"),modifier=Modifier.weight(1f).heightIn(min=60.dp)){Text("视频")}
+                            Button(onClick={hub.phoneMode(5)},enabled=snapshot.optBoolean("canMode"),modifier=Modifier.weight(1f).heightIn(min=60.dp)){Text("拍照")}
+                        }
+                    }
                     ActionRow("search","搜索相机",::scanCamera)
                     if(hub.rememberedCameraAddress.isNotEmpty()){
                         ActionRow("refresh","重连 · "+hub.rememberedCameraName.ifEmpty{"上次的相机"}){hub.requestReconnect();if(!hub.enabled)requestStart()}
@@ -195,10 +212,37 @@ class MainActivity: ComponentActivity(),RelayHub.UiListener {
                     ToggleRow("自动重连",hub.autoReconnectEnabled,hub::setAutoReconnect,"仅重连相机，不自动录像")
                     ActionRow("settings","系统设置",::openAppSettings)
                     ActionRow("more","连接记录"){page="logs"}
+                    ActionRow("refresh","检查更新"){page="updates";updateChecker.check()}
                     ActionRow("refresh","重新配对相机"){confirm("重新配对相机？","清除本应用保存的相机授权并断开连接。","重新配对",hub::forgetCamera)}
                     Text("Action 中转 · ${BuildConfig.VERSION_NAME}",fontSize=12.sp,color=colors.onBackgroundVariant)
                 }
                 "logs" -> SelectionContainer{Text(hub.logs.joinToString("\n\n"),fontSize=12.sp,fontFamily=FontFamily.Monospace)}
+                "updates" -> {
+                    val state=releaseState
+                    val release=state.release
+                    Card(Modifier.fillMaxWidth(),insideMargin=PaddingValues(22.dp)){
+                        Text("当前版本 ${BuildConfig.VERSION_NAME}",color=colors.onSurfaceVariantSummary,fontSize=14.sp)
+                        Spacer(Modifier.height(12.dp))
+                        Text(when{state.checking->"正在检查更新…";state.error!=null->"暂时无法检查更新";release?.isNewer==true->"发现新版本 ${release.version}";release!=null->"当前已是最新版本";else->"检查 GitHub 正式版本"},fontSize=22.sp,fontWeight=FontWeight.SemiBold)
+                        if(release!=null){Spacer(Modifier.height(8.dp));Text("最新版本 ${release.version}"+if(release.publishedDate.isNotBlank())" · ${release.publishedDate}"else "",fontSize=13.sp,color=colors.onSurfaceVariantSummary)}
+                        state.error?.let{Spacer(Modifier.height(10.dp));Text(it,color=colors.error,fontSize=14.sp)}
+                    }
+                    if(release!=null){
+                        if(release.isNewer){
+                            release.apkUrl?.let{url->ActionRow("refresh","下载手机 APK"){openReleaseLink(url)}}
+                            release.watchUrl?.let{url->ActionRow("watch","下载配套手表 RPK"){openReleaseLink(url)}}
+                            if(release.apkUrl==null || release.watchUrl==null)Text("此版本的配套安装包尚未齐全，请在发布页面查看。",color=colors.onBackgroundVariant)
+                            Text("手机和手表请更新到同一版本。下载后按系统提示安装。",fontSize=13.sp,color=colors.onBackgroundVariant)
+                        }
+                        if(release.notes.isNotBlank())Card(Modifier.fillMaxWidth(),insideMargin=PaddingValues(20.dp)){
+                            Text("更新说明",fontWeight=FontWeight.SemiBold)
+                            Spacer(Modifier.height(12.dp))
+                            SelectionContainer{Text(release.notes,fontSize=14.sp)}
+                        }
+                    }
+                    Button(onClick={updateChecker.check()},enabled=!state.checking,modifier=Modifier.fillMaxWidth().heightIn(min=64.dp)){Text(if(state.checking)"检查中…"else "重新检查")}
+                    ActionRow("info","打开 GitHub 发布页"){openReleaseLink(release?.releaseUrl ?: "${ReleaseUpdate.REPOSITORY}/releases/latest")}
+                }
             }
         }
     }

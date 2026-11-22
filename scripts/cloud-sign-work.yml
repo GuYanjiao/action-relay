@@ -1,0 +1,63 @@
+name: Sign staged Action Relay work
+on:
+  push:
+    branches: ['signing/action-update-*']
+permissions:
+  contents: write
+  actions: write
+jobs:
+  sign:
+    if: github.repository == 'GuYanjiao/action-relay'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Sign feature tree with the existing release identity
+        env:
+          ACTION_RELAY_GPG_PRIVATE_KEY: ${{ secrets.ACTION_RELAY_GPG_PRIVATE_KEY }}
+          ACTION_RELAY_GPG_PASSPHRASE: ${{ secrets.ACTION_RELAY_GPG_PASSPHRASE }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ACTION_RELAY_GPG_PRIVATE_KEY"
+          test -n "$ACTION_RELAY_GPG_PASSPHRASE"
+          base="$(git rev-parse "$GITHUB_SHA^")"
+          test "$base" = "$(git rev-parse origin/main)"
+          target="work/signed-${GITHUB_REF_NAME#signing/}"
+          expected='9BC5BCD68F629DCE8438F9A15B12374378EAC33B'
+          export GNUPGHOME
+          GNUPGHOME="$(mktemp -d "$RUNNER_TEMP/commit-gpg.XXXXXX")"
+          trap 'gpgconf --kill gpg-agent || true; rm -rf -- "$GNUPGHOME"' EXIT
+          chmod 700 "$GNUPGHOME"
+          printf '%s' "$ACTION_RELAY_GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --list-secret-keys --with-colons "$expected" | awk -F: '$1=="fpr" {print $10}' | grep -Fxq "$expected"
+          cat > "$GNUPGHOME/sign-gpg" <<'SH'
+          #!/usr/bin/env bash
+          exec gpg --batch --pinentry-mode loopback --passphrase-fd 3 "$@" 3<<<"$ACTION_RELAY_GPG_PASSPHRASE"
+          SH
+          chmod 700 "$GNUPGHOME/sign-gpg"
+          # The temporary workflow and its unsigned bootstrap commit never enter main.
+          git update-index --force-remove .github/workflows/cloud-signing-bootstrap.yml
+          tree="$(git write-tree)"
+          author="$(git show -s --format=%an "$GITHUB_SHA")"
+          email="$(git show -s --format=%ae "$GITHUB_SHA")"
+          message="$(git show -s --format=%s "$GITHUB_SHA")"
+          if git show-ref --verify --quiet "refs/remotes/origin/$target" &&
+             test "$(git rev-parse "origin/$target^{tree}")" = "$tree" &&
+             test "$(git rev-parse "origin/$target^")" = "$base"; then
+            signed="$(git rev-parse "origin/$target")"
+          else
+            signed="$(git -c user.name="$author" -c user.email="$email" -c user.signingkey="$expected" -c gpg.program="$GNUPGHOME/sign-gpg" commit-tree "$tree" -p "$base" -S -m "$message")"
+          fi
+          git verify-commit --raw "$signed" 2> "$GNUPGHOME/verification"
+          grep '^\[GNUPG:\] VALIDSIG ' "$GNUPGHOME/verification" | grep -Fq "$expected"
+          if git cat-file -e "$signed:.github/workflows/cloud-signing-bootstrap.yml" 2>/dev/null; then exit 1; fi
+          git push origin "$signed:refs/heads/$target"
+          if git diff --name-only "$base" "$signed" | grep -qvE '^(docs/|README\.md$)'; then
+            curl --fail-with-body -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'Content-Type: application/json' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/dispatches" \
+              -d "$(jq -nc --arg ref "$target" '{ref:$ref}')"
+          fi
+          printf 'Signed work commit: %s\n' "$signed"

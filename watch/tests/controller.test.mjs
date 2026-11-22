@@ -198,3 +198,20 @@ for(const invalid of [{session:'session-b'},{seq:1},{revision:8},{camera:'invali
   t.controller.destroy();checked++;
 }
 console.log(`PASS: ${checked} controller integration scenarios; no camera command retries.`);
+{
+  const t=setup();t.controller.show();t.status({canMode:true});
+  assert.equal(t.view().modeEnabled,true);assert.equal(t.controller.command('photoMode'),true);
+  assert.equal(t.sent.filter(x=>x.type==='command')[0].action,'photoMode');
+  assert.equal(t.view().modeEnabled,false);assert.equal(t.controller.command('videoMode'),false);
+  t.advance(13000);assert.equal(t.view().pending,false);
+  assert.equal(t.sent.filter(x=>x.type==='command').length,1,'mode timeout never retries');
+  t.controller.destroy();
+}
+{
+  const t=setup();t.controller.show();t.status();
+  assert.equal(t.view().modeEnabled,false);assert.equal(t.controller.command('videoMode'),false,'old phone without canMode stays read-only');
+  t.status({canMode:true,busy:true});assert.equal(t.view().modeEnabled,false);assert.equal(t.controller.command('photoMode'),false,'busy camera cannot switch');
+  t.status({canMode:true});t.advance(6100);assert.equal(t.controller.command('photoMode'),false,'stale mode capability rejected');
+  t.controller.destroy();
+}
+console.log('PASS: watch mode capability, pending command isolation, stale/busy rejection and no retries');

@@ -12,3 +12,5 @@ Actions Secrets：
 - ACTION_RELAY_GPG_PRIVATE_KEY、ACTION_RELAY_GPG_PASSPHRASE：用户于2026-11-05明确授权云端使用的 Git 签名密钥。仅发布任务导入临时密钥环，退出时清理，不写入附件。
 
 每个 Release 包含 build-info.json、SHA256SUMS.txt 和安装包验证报告，可追溯源码提交及云端运行。构建通过不代表新增硬件功能已经实测。若发布任务失败，优先重跑失败任务，不推空提交重新占用版本。
+
+2026-11-21用户授权云端原GPG密钥签署代码提交。模板为 `scripts/cloud-sign-work.yml`：临时签名分支添加 `.github/workflows/cloud-signing-bootstrap.yml`，Actions在临时密钥环中签署相同功能树，正式提交移除引导工作流且直接以main为父提交。`signing/action-update-<批次>` 对应 `work/signed-action-update-<批次>`，每次修改使用新批次。main只快进到经验证的个人签名提交，不接收临时无签名提交。功能改动签名后自动触发预览构建；仅文档改动不重复编译。私钥及口令不从Actions导出。

@@ -36,6 +36,12 @@ class DjiSession(private val clock: Clock, private val transport: Transport, pri
     private var pending: Pending?=null
     private var recovery: Pending?=null
     private var captureAction: CaptureAction?=null
+    private var modeChange: ModeChange?=null
+    private class ModeChange(val id: String, val target: Int, val sequence: Int, now: Long) {
+        val deadline=now+COMMAND_TIMEOUT_MS
+        var acked=false
+        var ackGeneration=0L
+    }
     private var recoveryDeadline=0L
     private var lastStatusRecoveryAt=0L
     private var staleLogged=false
@@ -65,28 +71,55 @@ class DjiSession(private val clock: Clock, private val transport: Transport, pri
     fun getStatus()=status
     fun getStatusAgeMs()=status?.let { maxOf(0, clock.nowMs()-it.receivedAtMs) } ?: Long.MAX_VALUE
     fun getRevision()=revision
-    fun isBusy()=pending!=null || captureAction!=null
+    fun isBusy()=pending!=null || captureAction!=null || modeChange!=null
     fun getPendingDesired(): Boolean?=pending?.desired ?: recovery?.desired
     fun getCommandPhase(): String {
+        if(modeChange!=null)return "switching"
         captureAction?.let { return if(it.switching)"switching" else "capturing" }
         pending?.let { return if(it.desired)"starting" else "stopping" }
         return if(recovery!=null)"recovering" else "idle"
     }
     fun canStartRecording(): Boolean {
         val current=status ?: return false
-        return isReady() && pending==null && recovery==null && captureAction==null && getStatusAgeMs()<=STATUS_FRESH_MS && !current.isModeTransition() && current.temperatureState<2 && (current.isExplicitlyStopped() || (current.mode==1 && current.cameraState==2))
+        return isReady() && pending==null && recovery==null && captureAction==null && modeChange==null && getStatusAgeMs()<=STATUS_FRESH_MS && !current.isModeTransition() && current.temperatureState<2 && (current.isExplicitlyStopped() || (current.mode==1 && current.cameraState==2))
     }
     fun canStopRecording(): Boolean {
-        if(!isReady() || lastKnownMode!=1)return false
+        if(!isReady() || lastKnownMode!=1 || modeChange!=null)return false
         captureAction?.let { return !it.photo }
         pending?.let { return it.desired }
         if(recovery!=null)return true
         return getStatusAgeMs()<=STATUS_FRESH_MS && status?.isRecording()==true
     }
     fun canControlRecording()=canStartRecording() || canStopRecording()
+    fun canChangeMode(): Boolean {
+        val current=status ?: return false
+        return isReady() && !isBusy() && recovery==null && getStatusAgeMs()<=STATUS_FRESH_MS && !current.isModeTransition() && current.temperatureState<2 &&
+            (current.mode==1 || current.mode==5) && (current.cameraState==1 || current.cameraState==2)
+    }
+    fun setMode(target: Int, requestId: String): Boolean {
+        require(target==1 || target==5){"Only normal video/photo supported"}
+        require(requestId.isNotEmpty()){"requestId required"}
+        if(!canChangeMode()){listener.onCommandResult(requestId,true,"rejected","请在相机待机后切换模式");return false}
+        if(status?.mode==target && status?.cameraState==1){listener.onCommandResult(requestId,true,"confirmed","相机已处于所选模式");return true}
+        val action=ModeChange(requestId,target,nextSequence(),clock.nowMs());modeChange=action;revision++
+        try{transport.send(DjiProtocol.switchMode(action.sequence,target))}
+        catch(error: Exception){if(modeChange===action)finishMode("unknown","模式切换发送未确认，不会自动重发");return false}
+        return modeChange===action && isReady()
+    }
+    private fun observeMode() {
+        val action=modeChange ?: return;val current=status ?: return
+        if(clock.nowMs()>=action.deadline){finishMode("unknown","模式切换结果未确认，不会自动重发");return}
+        if(current.temperatureState>=2 || current.cameraState==3){finishMode("unknown","相机状态已变化，请以相机当前模式为准");return}
+        if(action.acked && statusGeneration>action.ackGeneration && current.mode==action.target && current.cameraState==1 && !current.isModeTransition())
+            finishMode("confirmed",if(action.target==1)"已确认切换到视频模式"else "已确认切换到拍照模式")
+    }
+    private fun finishMode(outcome: String, message: String) {
+        val action=modeChange;modeChange=null;revision++
+        if(action!=null)listener.onCommandResult(action.id,true,outcome,message)
+    }
     fun startHandshake(firstPairing: Boolean, verificationCode: Int) {
         if(phase=="handshaking" || isReady()){listener.onLog("连接流程已在进行，未重复请求");return}
-        phase="handshaking"; status=null; pending=null; recovery=null; captureAction=null; lastKnownMode=-1
+        phase="handshaking"; status=null; pending=null; recovery=null; captureAction=null;modeChange=null; lastKnownMode=-1
         decoder.reset(); staleLogged=false; revision++; listener.onReady(false)
         handshakeSequence=nextSequence(); handshakeDeadline=clock.nowMs()+HANDSHAKE_TIMEOUT_MS
         try {
@@ -128,11 +161,18 @@ class DjiSession(private val clock: Clock, private val transport: Transport, pri
             if(frame.payload.size<7){listener.onLog("已忽略过短相机状态");return}
             val current=DjiProtocol.cameraStatus(frame,clock.nowMs());status=current
             statusGeneration++;revision++;lastKnownMode=current.mode;staleLogged=false;listener.onStatus(current)
+            if(modeChange!=null)observeMode()
             if(captureAction!=null)observeCapture()
             val operation=pending
             if(operation!=null)observeTarget(operation,false)
             else recovery?.let { if(clock.nowMs()>=recoveryDeadline){recovery=null;revision++}else observeTarget(it,true) }
             return
+        }
+        val switching=modeChange
+        if(switching!=null && frame.isResponse() && frame.sequence==switching.sequence && frame.`is`(0x1d,4)){
+            if(frame.payload.isEmpty())return
+            if(DjiProtocol.u8(frame.payload[0])!=0){finishMode("failed","相机拒绝切换模式");return}
+            switching.acked=true;switching.ackGeneration=statusGeneration;revision++;return
         }
         val action=captureAction
         if(action!=null && frame.isResponse() && frame.sequence==action.sequence && frame.`is`(0x1d,if(action.switching)4 else 3)){
@@ -161,7 +201,7 @@ class DjiSession(private val clock: Clock, private val transport: Transport, pri
     }
     fun canTakePhoto(): Boolean {
         val current=status ?: return false
-        return isReady() && pending==null && recovery==null && captureAction==null && getStatusAgeMs()<=STATUS_FRESH_MS && current.mode==5 && !current.isModeTransition() && (current.cameraState==1 || current.cameraState==2) && current.temperatureState<2
+        return isReady() && pending==null && recovery==null && captureAction==null && modeChange==null && getStatusAgeMs()<=STATUS_FRESH_MS && current.mode==5 && !current.isModeTransition() && (current.cameraState==1 || current.cameraState==2) && current.temperatureState<2
     }
     fun takePhoto(id: String): Boolean {
         require(id.isNotEmpty()){ "requestId required" }
@@ -199,6 +239,7 @@ class DjiSession(private val clock: Clock, private val transport: Transport, pri
     }
     fun setRecording(desired: Boolean, requestId: String): Boolean {
         require(requestId.isNotEmpty()){ "requestId required" }
+        if(modeChange!=null){listener.onCommandResult(requestId,desired,"rejected","模式切换尚待确认");return false}
         captureAction?.let {
             if(!desired && !it.photo){
                 finishCapture("unknown","已取消待执行的开始录像，不会自动重发")
@@ -230,6 +271,7 @@ class DjiSession(private val clock: Clock, private val transport: Transport, pri
         listener.onLog(if(desired)"已发送开始录像，等待相机确认" else "已发送停止录像，正在等待相机停止及状态确认");return true
     }
     fun tick(nowMs: Long) {
+        modeChange?.let{if(nowMs>=it.deadline)finishMode("unknown","模式切换结果未确认，不会自动重发")}
         captureAction?.let { if(nowMs>=it.deadline)finishCapture("unknown","切换或拍照结果未确认，不会重发") }
         if(phase=="handshaking" && nowMs>=handshakeDeadline){failHandshake("等待相机授权超时，请在相机上确认后重新连接");return}
         pending?.let { timedOut -> if(nowMs>=timedOut.deadline){
@@ -239,7 +281,7 @@ class DjiSession(private val clock: Clock, private val transport: Transport, pri
             result(timedOut,if(knownRejected)"failed" else "unknown",if(knownRejected)"相机返回错误码 ${timedOut.ackCode}，目标状态未达成；将继续同步" else if(timedOut.desired)"开始结果尚未确认，将继续同步相机状态；不会自动重发" else "停止结果仍未确认，将继续同步；请查看相机实际状态")
         } }
         if(recovery!=null && nowMs>=recoveryDeadline){recovery=null;revision++;listener.onLog("迟到确认窗口已结束，请以相机最新状态为准")}
-        if(isReady() && (pending!=null || recovery!=null || captureAction!=null) && getStatusAgeMs()>STATUS_RECOVERY_INTERVAL_MS && nowMs-lastStatusRecoveryAt>=STATUS_RECOVERY_INTERVAL_MS){
+        if(isReady() && (pending!=null || recovery!=null || captureAction!=null || modeChange!=null) && getStatusAgeMs()>STATUS_RECOVERY_INTERVAL_MS && nowMs-lastStatusRecoveryAt>=STATUS_RECOVERY_INTERVAL_MS){
             lastStatusRecoveryAt=nowMs
             try{transport.send(DjiProtocol.subscribeStatus(nextSequence()))}catch(error: Exception){listener.onLog("状态同步请求未能发送："+safeMessage(error))}
         }
@@ -248,13 +290,17 @@ class DjiSession(private val clock: Clock, private val transport: Transport, pri
         }
     }
     fun disconnect() {
-        phase="disconnected";if(captureAction!=null)finishCapture("unknown","连接已断开，未确认拍摄不会重发")
+        phase="disconnected"
+        if(modeChange!=null)finishMode("unknown","连接已断开，模式切换不会重发")
+        if(captureAction!=null)finishCapture("unknown","连接已断开，未确认拍摄不会重发")
         val interrupted=pending;pending=null;recovery=null;status=null;lastKnownMode=-1;decoder.reset();revision++
         if(interrupted!=null)result(interrupted,"unknown","连接已断开，录像结果未确认；不会重发旧指令")
         listener.onReady(false)
     }
     private fun failHandshake(reason: String) {
-        phase="failed";if(captureAction!=null)finishCapture("unknown","授权已失效，未确认拍摄不会重发")
+        phase="failed"
+        if(modeChange!=null)finishMode("unknown","授权已失效，模式切换不会重发")
+        if(captureAction!=null)finishCapture("unknown","授权已失效，未确认拍摄不会重发")
         status=null;lastKnownMode=-1;decoder.reset();revision++;listener.onReady(false);listener.onLog(reason);listener.onDisconnectRequired(reason)
     }
     private fun result(operation: Pending, outcome: String, message: String) { for(id in operation.requestIds.toList())listener.onCommandResult(id,operation.desired,outcome,message) }

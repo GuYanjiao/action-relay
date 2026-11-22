@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <div class="remote" if="{{!toolsOpen}}">
+    <div class="remote" if="{{!toolsOpen && !captureSettingsOpen}}">
       <div class="status-strip">
         <div class="status-item status-phone" onclick="openTools"><image class="status-icon" src="{{phoneIcon}}"></image></div>
         <div class="status-item status-camera" onclick="openTools"><image class="status-icon" src="{{cameraIcon}}"></image></div>
@@ -14,7 +14,15 @@
         <progress if="{{pressRingVisible}}" class="capture-progress" type="arc" percent="{{pressProgress}}"></progress>
       </div>
       <text class="{{timerClass}}">{{timerText}}</text>
-      <text class="format-summary">{{videoFormatText}}</text>
+      <text class="format-summary" onclick="openCaptureSettings">{{videoFormatText}}</text>
+    </div>
+    <div class="mode-settings" if="{{captureSettingsOpen}}">
+      <text class="mode-title">拍摄模式</text>
+      <text class="mode-state">{{modeText}}</text>
+      <div class="{{modeButtonClass}}" onclick="selectVideoMode"><text class="mode-label">视频</text></div>
+      <div class="{{modeButtonClass}}" onclick="selectPhotoMode"><text class="mode-label">拍照</text></div>
+      <text class="mode-note">分辨率和帧率在相机设置</text>
+      <div class="mode-back" onclick="closeCaptureSettings"><text class="back-label">返回</text></div>
     </div>
     <div class="tools" if="{{toolsOpen}}">
       <text class="tools-title">连接</text>
@@ -36,6 +44,10 @@ import { remainingLabel, videoLabel, temperatureLabel, temperatureIcon } from '.
 export default {
   private: {
     toolsOpen: false,
+    captureSettingsOpen: false,
+    modeEnabled: false,
+    modeText: '等待相机状态',
+    modeButtonClass: 'mode-choice mode-disabled',
     phoneText: '手机：未连接',
     cameraText: '相机：未连接',
     noteText: '请在手机开启中转',
@@ -92,10 +104,13 @@ export default {
     this.photoEnabled = state.photoEnabled === true
     this.startEnabled = state.startEnabled === true
     this.stopEnabled = state.stopEnabled === true
+    this.modeEnabled = state.modeEnabled === true
+    this.modeButtonClass = this.modeEnabled ? 'mode-choice' : 'mode-choice mode-disabled'
+    this.modeText = state.recordPhase === 'switching' ? '正在确认切换' : state.pending === true ? '拍摄状态确认中' : state.cameraMode === 5 ? '当前：拍照' : state.cameraMode === 1 ? '当前：视频' : '等待相机状态'
     this.remainingText = remainingLabel(state.remainingSeconds)
     this.temperatureText = temperatureLabel(state.temperatureState)
     this.temperatureIcon = temperatureIcon(state.temperatureState)
-    this.videoFormatText = videoLabel(state.cameraMode, state.videoResolution, state.fpsIndex)
+    this.videoFormatText = state.cameraMode === 5 ? '拍照 · 切换' : videoLabel(state.cameraMode, state.videoResolution, state.fpsIndex)
     var phone = state.phoneConnected === true
     var camera = state.cameraReady === true
     var recording = state.recording === true
@@ -160,6 +175,10 @@ export default {
     }
   },
   endCapturePress() { if (this._hold) this._hold.release() },
+  openCaptureSettings() { if (this._hold) this._hold.cancel(); this.toolsOpen = false; this.captureSettingsOpen = true },
+  closeCaptureSettings() { this.captureSettingsOpen = false },
+  selectVideoMode() { if (this.modeEnabled && this._relay) this._relay.command('videoMode') },
+  selectPhotoMode() { if (this.modeEnabled && this._relay) this._relay.command('photoMode') },
   openTools() { if (this._hold) this._hold.cancel(); this.toolsOpen = true },
   closeTools() { this.toolsOpen = false },
   refreshStatus() { if (this._relay) this._relay.refresh() }
@@ -183,7 +202,15 @@ export default {
 .capture-image { width: 192px; height: 192px; }
 .capture-refresh { width: 96px; height: 96px; }
 .capture-progress { position: absolute; left: 0px; top: 0px; width: 224px; height: 224px; color: #ff304d; layer-color: #e4e8ed; stroke-width: 12px; start-angle: 0deg; total-angle: 360deg; center-x: 112px; center-y: 112px; radius: 90px; }
-.format-summary { position: absolute; left: 153px; top: 402px; width: 160px; height: 32px; text-align: center; font-size: 24px; color: #cbd3df; }
+.format-summary { position: absolute; left: 153px; top: 398px; width: 160px; height: 44px; text-align: center; font-size: 24px; color: #cbd3df; }
+.mode-settings { width: 466px; height: 466px; background-color: #000000; flex-direction: column; align-items: center; padding-top: 42px; }
+.mode-title { width: 230px; height: 42px; text-align: center; font-size: 28px; color: #f1f3f6; }
+.mode-state { width: 290px; height: 38px; text-align: center; font-size: 20px; color: #a6b0bf; }
+.mode-choice { width: 280px; height: 68px; border-radius: 24px; background-color: #202630; align-items: center; justify-content: center; margin-top: 12px; }
+.mode-disabled { background-color: #12161c; }
+.mode-label { font-size: 28px; color: #e9edf4; }
+.mode-note { width: 300px; height: 35px; margin-top: 14px; text-align: center; font-size: 18px; color: #a6b0bf; }
+.mode-back { width: 180px; height: 58px; border-radius: 24px; background-color: #171b22; align-items: center; justify-content: center; margin-top: 8px; }
 .storage-badge { position: absolute; left: 14px; top: 211px; width: 104px; height: 69px; flex-direction: column; align-items: center; justify-content: center; }
 .temperature-badge { position: absolute; left: 348px; top: 211px; width: 104px; height: 69px; flex-direction: column; align-items: center; justify-content: center; }
 .temperature-value { width: 104px; height: 25px; text-align: center; font-size: 19px; color: #f1f3f6; }

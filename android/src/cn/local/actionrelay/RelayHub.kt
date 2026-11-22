@@ -241,7 +241,7 @@ class RelayHub(ctx: Context) {
         val recording: Any=if(fresh && s.isControllableState())s.isRecording()else JSONObject.NULL
         val detail=if(session.isReady() && !fresh)"等待相机最新状态，按钮暂不可用"else message
         return json("v",1,"type","status","seq",++statusSeq,"session",epoch,"ticket",ticket,"camera",if(enabled)phase else "disconnected","recording",recording,
-            "canControl",enabled && session.canControlRecording(),"canStart",enabled && session.canStartRecording(),"canPhoto",enabled && session.canTakePhoto(),"canStop",enabled && session.canStopRecording(),"busy",session.isBusy(),"pendingDesired",session.getPendingDesired() ?: JSONObject.NULL,
+            "canControl",enabled && session.canControlRecording(),"canMode",enabled && session.canChangeMode(),"canStart",enabled && session.canStartRecording(),"canPhoto",enabled && session.canTakePhoto(),"canStop",enabled && session.canStopRecording(),"busy",session.isBusy(),"pendingDesired",session.getPendingDesired() ?: JSONObject.NULL,
             "recordPhase",session.getCommandPhase(),"watchConnected",bridge.isWatchConnected(),"gpsState",gpsState,"gpsEnabled",gpsEnabled,"battery",if(fresh)s.batteryPercent else -1,"recordSeconds",if(fresh)s.recordingSeconds else -1,"gpsMessage",gpsMessage,"message",detail,
             "storageMb",if(fresh)s.remainingCapacityMb else -1,"cameraMode",if(fresh)s.mode else -1,"remainingSeconds",if(fresh)s.remainingRecordSeconds else -1,"temperatureState",if(fresh)s.temperatureState else -1,"cameraState",if(fresh)s.cameraState else -1,"videoResolution",if(fresh)s.videoResolution else -1,"fpsIndex",if(fresh)s.fpsIndex else -1,"revision",session.getRevision())
     }
@@ -249,6 +249,13 @@ class RelayHub(ctx: Context) {
     private fun publish(){if(!::session.isInitialized || !::bridge.isInitialized)return;newTicket();lastPublish=SystemClock.elapsedRealtime();lastPublishedControl=controlKey();sendWatch(snapshot())}
     private fun sendWatch(objectValue: JSONObject){if(enabled && ::bridge.isInitialized)bridge.send(objectValue.toString())}
     fun phoneCommand(start: Boolean)=command(start,"phone-"+UUID.randomUUID())
+    fun phoneMode(mode: Int)=modeCommand(mode,"phone-mode-"+UUID.randomUUID())
+    private fun modeCommand(mode: Int, id: String){
+        if(!enabled || !session.canChangeMode()){reject(id,"请在相机连接、待机后切换模式");return}
+        busy=true;activeRequest=id;commandStarts[id]=SystemClock.elapsedRealtime();message="正在切换相机模式"
+        ble.setControlPriority(true);session.setMode(mode,id);wakePulse()
+        if(id==activeRequest)accepted(id);changed()
+    }
     private fun photoCommand(id: String){
         if(!enabled || !session.canTakePhoto()){reject(id,"相机拍照未就绪");return}
         busy=true;activeRequest=id;commandStarts[id]=SystemClock.elapsedRealtime();message="正在请求拍照"
@@ -273,10 +280,11 @@ class RelayHub(ctx: Context) {
             if(type=="hello" || type=="getStatus"){publish();changed();return};if(type!="command")return
             val id=request.optString("id","");if(id.length !in 1..64)return
             results[id]?.let{sendWatch(it);publish();return}
-            val action=request.optString("action","");if(action!="start" && action!="stop" && action!="photo"){reject(id,"不支持的操作");return}
+            val action=request.optString("action","");if(action!="start" && action!="stop" && action!="photo" && action!="videoMode" && action!="photoMode"){reject(id,"不支持的操作");return}
             val issued=tickets[request.optString("ticket","")]
             if(epoch!=request.optString("session","") || issued==null || SystemClock.elapsedRealtime()-issued>6000){reject(id,"指令凭据已过期，请等状态更新后重新点击");return}
-            if(action=="photo")photoCommand(id)else command(action=="start",id)
+            if(action=="videoMode" || action=="photoMode")modeCommand(if(action=="videoMode")1 else 5,id)
+            else if(action=="photo")photoCommand(id)else command(action=="start",id)
         }catch(_: Exception){log("手表消息格式不符，未执行")}
     }
     private fun reject(id: String, detail: String){
