@@ -2,6 +2,8 @@
 
 更新：2026-11-22。
 
+2026-11-24：修复截图工作流的 Ubuntu KVM emulator 脚本兼容性；原因是脚本由 `/bin/sh`（dash）执行，`set -euo pipefail` 中的 `pipefail` 不受支持。已改为 `set -eu`，并通过 YAML/差异静态验证，云端截图回归待运行。
+
 当前公开手机版本 **0.4.9 / versionCode18**：新增手机端手动检查更新与视频/拍照模式选择，个人GPG签名提交c36ceba已合入main。预览构建44976801900与正式发布44977354655全部通过；已下载并核对公开APK/RPK、摘要、同版信息、ARM64及16KB对齐，并验证个人GPG标签。所有构建和可执行测试均在云端；开发板仓库独立。详见[本轮验收](../validation/updates-mode-2026-11-22.md)。
 
 本仓库为手机中转版：Android 手机负责相机 BLE 和真实 GNSS，S4 为控制界面。开发板版独立于 [action-relay-nrf52840](https://github.com/GuYanjiao/action-relay-nrf52840)，避免版本、分支和发布混用。
