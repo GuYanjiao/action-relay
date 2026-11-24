@@ -21,9 +21,22 @@ permissions:
 
 jobs:
   android-screenshots:
-    name: Capture Android APK Screenshots (ARM64 Emulator)
-    runs-on: macos-15
+    name: Capture Android APK Screenshots (Ubuntu KVM Emulator)
+    runs-on: ubuntu-22.04
     steps:
+      - name: Free disk space for AVD userdata partition
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          df -h
+
+      - name: Enable KVM permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm
+
       - name: Download release APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -35,14 +48,17 @@ jobs:
             --dir .
           ls -lh ActionRelay-*.apk
 
-      - name: Boot ARM64 Android Emulator and capture screens
+      - name: Boot x86_64 Google APIs Emulator (with ARM64 translation) and capture screens
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 33
           target: google_apis
-          arch: arm64-v8a
+          arch: x86_64
           profile: pixel_6
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disk-size: 2000M
+          ram-size: 2048M
+          emulator-boot-timeout: 600
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
             set -euo pipefail
@@ -63,7 +79,7 @@ jobs:
             adb shell pm grant cn.local.actionrelay android.permission.ACCESS_COARSE_LOCATION || true
 
             adb shell am start -n cn.local.actionrelay/.MainActivity
-            sleep 4
+            sleep 5
 
             python3 - << 'PYEOF'
             import re, subprocess, time, xml.etree.ElementTree as ET
@@ -118,7 +134,7 @@ jobs:
                 snap("03_phone_gps.png")
                 go_back()
 
-            # 4. Tools page -> Logs & Updates
+            # 4. Tools page -> Updates & Logs
             if tap_text("工具"):
                 snap("04_phone_tools.png")
                 if tap_text("检查更新"):
